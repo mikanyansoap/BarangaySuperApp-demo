@@ -160,6 +160,67 @@
                         android:inputType="textPersonName" />
                 </androidx.cardview.widget.CardView>
 
+                <!-- Demographics (Row) -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:orientation="horizontal">
+
+                    <!-- Date of Birth -->
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Date of Birth"
+                            android:textColor="#2A3532"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                        <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                            <EditText android:id="@+id/etFormDOB" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="MM/DD/YYYY" android:paddingHorizontal="16dp" android:textSize="14sp" android:focusable="false" android:clickable="true" />
+                        </androidx.cardview.widget.CardView>
+                    </LinearLayout>
+
+                    <!-- Gender -->
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Gender"
+                            android:textColor="#2A3532"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                        <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                            <Spinner android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:paddingHorizontal="12dp" />
+                        </androidx.cardview.widget.CardView>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Place of Birth -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Place of birth"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etPlaceOfBirth"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="City / Municipality, Province"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPostalAddress" />
+                </androidx.cardview.widget.CardView>
+
                 <!-- Mobile number (with +63 prefix box) -->
                 <TextView
                     android:layout_width="wrap_content"

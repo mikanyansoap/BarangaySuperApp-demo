@@ -1,8 +1,10 @@
 package com.example.barangay_superapp;
 
+import android.app.DatePickerDialog;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
 import android.widget.TextView;
@@ -21,6 +23,7 @@ import org.json.JSONObject;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 
@@ -49,6 +52,34 @@ public class PreviewActivity extends AppCompatActivity {
         CardView btnGoBack = findViewById(R.id.btnGoBack);
         if (btnGoBack != null) {
             btnGoBack.setOnClickListener(v -> finish()); // Closes current activity and returns to previous
+        }
+
+        // ====================================================================
+        // DATE OF BIRTH PICKER LOGIC (Sign Up & Brgy ID Form)
+        // ====================================================================
+        if (layoutId == R.layout.sign_up || layoutId == R.layout.request_brgy_id) {
+            EditText etFormDOB = findViewById(R.id.etFormDOB);
+            if (etFormDOB != null) {
+                etFormDOB.setOnClickListener(v -> {
+                    Calendar calendar = Calendar.getInstance();
+                    int year = calendar.get(Calendar.YEAR);
+                    int month = calendar.get(Calendar.MONTH);
+                    int day = calendar.get(Calendar.DAY_OF_MONTH);
+
+                    DatePickerDialog datePickerDialog = new DatePickerDialog(
+                            PreviewActivity.this,
+                            (view, selectedYear, selectedMonth, selectedDay) -> {
+                                // Format and set the text
+                                String date = (selectedMonth + 1) + "/" + selectedDay + "/" + selectedYear;
+                                etFormDOB.setText(date);
+                            }, year, month, day);
+
+                    // CRITICAL: This restricts the maximum selectable date to today!
+                    datePickerDialog.getDatePicker().setMaxDate(System.currentTimeMillis());
+                    
+                    datePickerDialog.show();
+                });
+            }
         }
 
         // ====================================================================
