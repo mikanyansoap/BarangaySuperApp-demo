@@ -1,0 +1,142 @@
+{
+  "announcements": [
+    {
+      "id": "a1",
+      "monthYearGroup": "September 2026",
+      "category": "Advisory",
+      "categoryColorHex": "#CC4E42",
+      "categoryBgHex": "#FCEBEA",
+      "date": "Sept 9",
+      "title": "Water interruption on Rizal St.",
+      "description": "Maintenance work on the main line, 8:00 AM–2:00 PM. Store extra water beforehand."
+    },
+    {
+      "id": "a2",
+      "monthYearGroup": "September 2026",
+      "category": "Health",
+      "categoryColorHex": "#247D76",
+      "categoryBgHex": "#DFF2F0",
+      "date": "Sept 7",
+      "title": "Free anti-rabies vaccination",
+      "description": "Sept 14, barangay hall. Bring your pet's health record if you have one."
+    },
+    {
+      "id": "a3",
+      "monthYearGroup": "September 2026",
+      "category": "Event",
+      "categoryColorHex": "#DBA03B",
+      "categoryBgHex": "#FDF1DA",
+      "date": "Sept 5",
+      "title": "Barangay assembly",
+      "description": "Sept 22, 6:00 PM at the covered court. Budget review and open forum."
+    },
+    {
+      "id": "a4",
+      "monthYearGroup": "August 2026",
+      "category": "Health",
+      "categoryColorHex": "#247D76",
+      "categoryBgHex": "#DFF2F0",
+      "date": "Aug 28",
+      "title": "Feeding program results posted",
+      "description": "312 children weighed and assessed across all zones."
+    }
+  ],
+  "notifications": [
+    {
+      "id": "n1",
+      "dateGroup": "Sept 9, 2026 · Wed",
+      "iconType": "document",
+      "iconColorHex": "#247D76",
+      "iconBgHex": "#DDF0EC",
+      "title": "Your clearance is ready for pickup",
+      "description": "Request update · Barangay office · 10 minutes ago",
+      "isUnread": true
+    },
+    {
+      "id": "n2",
+      "dateGroup": "Sept 9, 2026 · Wed",
+      "iconType": "alert",
+      "iconColorHex": "#CC4E42",
+      "iconBgHex": "#FCEBEA",
+      "title": "A staff member replied to your report",
+      "description": "Report reply · \"We've dispatched someone to check the drainage.\" · 2 hours ago",
+      "isUnread": true
+    },
+    {
+      "id": "n3",
+      "dateGroup": "Sept 8, 2026 · Tue",
+      "iconType": "announcement",
+      "iconColorHex": "#DBA03B",
+      "iconBgHex": "#FDF1DA",
+      "title": "New announcement posted",
+      "description": "Community announcement · Free anti-rabies vaccination · yesterday",
+      "isUnread": false
+    }
+  ],
+  "requests": [
+    {
+      "id": "r1",
+      "requestType": "Report",
+      "description": "Blocked drainage, Purok 3",
+      "dateSubmitted": "Submitted on Sept 7, 2026 · 9:14 AM",
+      "status": "Pending",
+      "statusColorHex": "#DBA03B",
+      "statusBgHex": "#FDF1DA"
+    },
+    {
+      "id": "r2",
+      "requestType": "Document request",
+      "description": "Barangay clearance",
+      "dateSubmitted": "Submitted on Sept 4, 2026 · 10:32 AM",
+      "status": "In progress",
+      "statusColorHex": "#247D76",
+      "statusBgHex": "#DDF0EC"
+    },
+    {
+      "id": "r3",
+      "requestType": "Barangay ID",
+      "description": "Renewal",
+      "dateSubmitted": "Submitted on Sept 8, 2026 · 2:05 PM",
+      "status": "In progress",
+      "statusColorHex": "#247D76",
+      "statusBgHex": "#DDF0EC"
+    },
+    {
+      "id": "r4",
+      "requestType": "Report",
+      "description": "Noise complaint, Rizal St.",
+      "dateSubmitted": "Submitted on Aug 30, 2026 · 4:47 PM",
+      "status": "Resolved",
+      "statusColorHex": "#6A756F",
+      "statusBgHex": "#DFE2DD"
+    }
+  ],
+  "dropdown_options": {
+    "report_categories": [
+      "Select a category",
+      "Disturbance / Noise Complaint",
+      "Delinquency / Vandalism",
+      "Blocked Drainage / Flooding",
+      "Garbage Collection Issue",
+      "Streetlight Repair",
+      "Others"
+    ],
+    "document_types": [
+      "Select document type",
+      "Barangay Clearance",
+      "Certificate of Residency",
+      "Certificate of Indigency",
+      "Business Clearance"
+    ],
+    "id_types": [
+      "Select ID type",
+      "Philippine Identification (PhilID / National ID)",
+      "Driver's License",
+      "Passport",
+      "UMID",
+      "Voter's ID",
+      "Postal ID",
+      "Senior Citizen ID"
+    ]
+  }
+}

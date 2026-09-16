@@ -1,0 +1,123 @@
+  {
+    "__comment__": "This is your Database Schema reference (keys and variables) based on the UI we built. Perfect for Firebase Firestore, MongoDB, or MySQL.",
+
+    "users": {
+      "__comment__": "Stores all resident information from the Sign Up and Barangay ID forms.",
+      "fields": {
+        "userId": "String (Unique ID from Firebase Auth or your backend)",
+        "role": "String ('resident', 'admin', 'staff')",
+        "accountStatus": "String ('pending', 'active', 'rejected')",
+
+        "personal_details": {
+          "firstName": "String",
+          "middleName": "String",
+          "lastName": "String",
+          "suffix": "String",
+          "dateOfBirth": "Timestamp / Date",
+          "gender": "String",
+          "civilStatus": "String"
+        },
+        "contact_and_address": {
+          "mobileNumber": "String",
+          "emailAddress": "String",
+          "currentAddress": "String",
+          "provincialAddress": "String",
+          "yearsOfStay": "Integer"
+        },
+        "family_and_work": {
+          "fatherName": "String",
+          "motherNameMaiden": "String",
+          "employerName": "String",
+          "classification": "String ('Homeowner', 'Household Helper', etc.)"
+        },
+        "emergency_contact": {
+          "contactName": "String",
+          "relationship": "String",
+          "contactNumber": "String"
+        },
+        "verification": {
+          "idType": "String",
+          "idPhotoUrl": "String (URL to storage)",
+          "selfiePhotoUrl": "String (URL to storage)",
+          "proofOfResidencyUrl": "String (URL to storage, for transferees)"
+        },
+        "createdAt": "Timestamp",
+        "updatedAt": "Timestamp"
+      }
+    },
+
+    "announcements_and_events": {
+      "__comment__": "Used for the Dashboard, Calendar, and Announcements tab.",
+      "fields": {
+        "announcementId": "String",
+        "authorId": "String (Admin who posted it)",
+        "type": "String ('announcement' or 'event')",
+        "category": "String ('Health', 'Advisory', 'Event', 'General')",
+        "title": "String",
+        "description": "String",
+        "eventDate": "Timestamp / Date (For calendar pinning)",
+        "eventTime": "String (e.g., '8:00 AM - 2:00 PM')",
+        "createdAt": "Timestamp"
+      }
+    },
+
+    "requests": {
+      "__comment__": "Stores all user submissions. You can filter by 'requestCategory' for the History tab.",
+      "fields": {
+        "requestId": "String",
+        "userId": "String (Who requested it)",
+        "requestCategory": "String ('document', 'report', 'barangay_id')",
+        "status": "String ('pending', 'in_progress', 'resolved', 'rejected', 'ready_for_pickup')",
+
+        "document_details": {
+          "__comment__": "Only filled if requestCategory is 'document'",
+          "documentType": "String ('Barangay Clearance', etc.)",
+          "purpose": "String"
+        },
+
+        "report_details": {
+          "__comment__": "Only filled if requestCategory is 'report'",
+          "incidentCategory": "String ('Disturbance', 'Blocked Drainage', etc.)",
+          "description": "String",
+          "locationAddress": "String",
+          "latitude": "Double",
+          "longitude": "Double",
+          "photoEvidenceUrl": "String (URL to storage)"
+        },
+
+        "barangay_id_details": {
+          "__comment__": "Only filled if requestCategory is 'barangay_id'",
+          "applicationType": "String ('new', 'renewal', 'transfer')",
+          "biometricsAppointmentDate": "Timestamp / Date"
+        },
+
+        "adminRemarks": "String (Feedback from barangay staff)",
+        "createdAt": "Timestamp",
+        "updatedAt": "Timestamp"
+      }
+    },
+
+    "notifications": {
+      "__comment__": "Sent to specific users when their request status changes.",
+      "fields": {
+        "notificationId": "String",
+        "userId": "String (Who receives it)",
+        "title": "String",
+        "message": "String",
+        "type": "String ('alert', 'document_ready', 'report_update')",
+        "isUnread": "Boolean",
+        "createdAt": "Timestamp"
+      }
+    },
+
+    "emergency_contacts": {
+      "__comment__": "Stores the hotlines. Admin can update these dynamically.",
+      "fields": {
+        "contactId": "String",
+        "level": "String ('barangay', 'city', 'national')",
+        "name": "String",
+        "phoneNumber": "String",
+        "iconType": "String ('police', 'fire', 'medical', 'general')"
+      }
+    }
+  }
