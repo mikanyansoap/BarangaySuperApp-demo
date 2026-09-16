@@ -80,11 +80,12 @@
                                 app:cardBackgroundColor="#FCEBEA"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#CC4E42" />
+                                    android:src="@drawable/ic_report"
+                                    app:tint="#CC4E42" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -134,11 +135,12 @@
                                 app:cardBackgroundColor="#DDF0EC"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#247D76" />
+                                    android:src="@drawable/ic_document"
+                                    app:tint="#247D76" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -196,11 +198,12 @@
                                 app:cardBackgroundColor="#FDF1DA"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#DBA03B" />
+                                    android:src="@drawable/ic_shield"
+                                    app:tint="#DBA03B" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -250,11 +253,12 @@
                                 app:cardBackgroundColor="#DDF0EC"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#247D76" />
+                                    android:src="@drawable/ic_document"
+                                    app:tint="#247D76" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -312,11 +316,12 @@
                                 app:cardBackgroundColor="#DDF0EC"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#247D76" />
+                                    android:src="@drawable/ic_document"
+                                    app:tint="#247D76" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -366,11 +371,12 @@
                                 app:cardBackgroundColor="#DDF0EC"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#247D76" />
+                                    android:src="@drawable/ic_document"
+                                    app:tint="#247D76" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -428,11 +434,12 @@
                                 app:cardBackgroundColor="#FDF1DA"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#DBA03B" />
+                                    android:src="@drawable/ic_shield"
+                                    app:tint="#DBA03B" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -482,11 +489,12 @@
                                 app:cardBackgroundColor="#DDF0EC"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#247D76" />
+                                    android:src="@drawable/ic_document"
+                                    app:tint="#247D76" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView
@@ -544,11 +552,12 @@
                                 app:cardBackgroundColor="#FCEBEA"
                                 app:cardCornerRadius="12dp"
                                 app:cardElevation="0dp">
-                                <View
+                                <ImageView
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:background="#CC4E42" />
+                                    android:src="@drawable/ic_report"
+                                    app:tint="#CC4E42" />
                             </androidx.cardview.widget.CardView>
 
                             <TextView

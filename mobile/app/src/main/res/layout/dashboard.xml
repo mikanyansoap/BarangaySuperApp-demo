@@ -446,18 +446,18 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical">
-
-            <View
+            <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:background="#AAB3AE" />
-
+                android:src="@drawable/ic_home"
+                app:tint="#174A45" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Home"
-                android:textColor="#6A756F"
+                android:textColor="#174A45"
+                android:textStyle="bold"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -467,12 +467,11 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical">
-
-            <View
+            <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:background="#AAB3AE" />
-
+                android:src="@drawable/ic_history"
+                app:tint="#AAB3AE" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -488,12 +487,12 @@
             app:cardBackgroundColor="#0D4A41"
             app:cardCornerRadius="28dp"
             app:cardElevation="2dp">
-
-            <View
-                android:layout_width="28dp"
-                android:layout_height="20dp"
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
-                android:background="#FFFFFF" />
+                android:src="@drawable/ic_badge"
+                app:tint="#FFFFFF" />
         </androidx.cardview.widget.CardView>
 
         <LinearLayout
@@ -502,12 +501,11 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical">
-
-            <View
+            <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:background="#AAB3AE" />
-
+                android:src="@drawable/ic_bell"
+                app:tint="#AAB3AE" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -523,12 +521,11 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical">
-
-            <View
+            <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:background="#AAB3AE" />
-
+                android:src="@drawable/ic_person"
+                app:tint="#AAB3AE" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

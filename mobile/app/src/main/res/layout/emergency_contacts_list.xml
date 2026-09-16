@@ -76,7 +76,7 @@
                     </LinearLayout>
                     <!-- Call Button Action -->
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -101,7 +101,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="0917-123-4567" android:textColor="#6A756F" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -125,7 +125,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="0918-987-6543" android:textColor="#6A756F" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -165,7 +165,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="(02) 8999-1111" android:textColor="#6A756F" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -190,7 +190,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="(02) 8999-2222" android:textColor="#6A756F" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -214,7 +214,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="(02) 8999-3333" android:textColor="#6A756F" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -253,7 +253,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="911" android:textColor="#CC4E42" android:textStyle="bold" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -277,7 +277,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="143" android:textColor="#CC4E42" android:textStyle="bold" android:textSize="14sp" />
                     </LinearLayout>
                     <androidx.cardview.widget.CardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#174A45" app:cardCornerRadius="20dp" app:cardElevation="0dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="📞" android:textColor="#FFFFFF" android:textSize="16sp" />
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_phone" app:tint="#FFFFFF" />
                     </androidx.cardview.widget.CardView>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
