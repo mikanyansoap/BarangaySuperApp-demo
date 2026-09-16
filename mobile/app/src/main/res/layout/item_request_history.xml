@@ -44,25 +44,6 @@
                     android:textStyle="bold"
                     tools:text="Report" />
 
-                <!-- Action Icon (Chat bubble placeholder on right) -->
-                <androidx.cardview.widget.CardView
-                    android:id="@+id/iconContainer"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:layout_alignParentEnd="true"
-                    android:layout_alignTop="@id/tvRequestType"
-                    app:cardBackgroundColor="#DDF0EC"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-
-                    <!-- Placeholder for message/chat icon -->
-                    <View
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_gravity="center"
-                        android:background="#247D76" />
-                </androidx.cardview.widget.CardView>
-
                 <!-- Description / Subtitle -->
                 <TextView
                     android:id="@+id/tvRequestDesc"
@@ -70,8 +51,6 @@
                     android:layout_height="wrap_content"
                     android:layout_below="@id/tvRequestType"
                     android:layout_marginTop="4dp"
-                    android:layout_toStartOf="@id/iconContainer"
-                    android:layout_marginEnd="8dp"
                     android:textColor="#6A756F"
                     android:textSize="16sp"
                     tools:text="Blocked drainage, Purok 3" />

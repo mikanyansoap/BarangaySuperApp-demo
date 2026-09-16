@@ -6,6 +6,7 @@ import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
 import android.widget.TextView;
+import android.content.Intent;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
@@ -15,18 +16,180 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 public class PreviewActivity extends AppCompatActivity {
     
-    // Track selected day state for the Calendar preview
     private int selectedDay = -1;
+    private String currentHistoryFilter = "All";
+    
+    private final List<JSONObject> allRequests = new ArrayList<>();
+    private final List<JSONObject> filteredRequests = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Retrieve the layout ID passed from MainActivity
         int layoutId = getIntent().getIntExtra("LAYOUT_ID", R.layout.starting);
         setContentView(layoutId);
+
+        if (layoutId == R.layout.request_history || layoutId == R.layout.calendar) {
+            loadMockData();
+        }
+
+        // ====================================================================
+        // GLOBAL GO BACK LOGIC (For screens without bottom nav)
+        // ====================================================================
+        CardView btnGoBack = findViewById(R.id.btnGoBack);
+        if (btnGoBack != null) {
+            btnGoBack.setOnClickListener(v -> finish()); // Closes current activity and returns to previous
+        }
+
+        // ====================================================================
+        // SERVICES REDIRECTION LOGIC
+        // ====================================================================
+        if (layoutId == R.layout.services) {
+            CardView cardReportForm = findViewById(R.id.cardReportForm);
+            CardView cardRequestForm = findViewById(R.id.cardRequestForm);
+            CardView cardReportDisaster = findViewById(R.id.cardReportDisaster);
+            CardView cardRequestBrgyId = findViewById(R.id.cardRequestBrgyId);
+            CardView cardRequestHistory = findViewById(R.id.cardRequestHistory);
+            CardView cardEmergencyContacts = findViewById(R.id.cardEmergencyContacts);
+            CardView cardAiChatbot = findViewById(R.id.cardAiChatbot);
+            CardView cardCalendar = findViewById(R.id.cardCalendar);
+            CardView cardAnnouncements = findViewById(R.id.cardAnnouncements);
+
+            if (cardReportForm != null) cardReportForm.setOnClickListener(v -> launchPreview(R.layout.report_form));
+            if (cardRequestForm != null) cardRequestForm.setOnClickListener(v -> launchPreview(R.layout.request_form));
+            if (cardReportDisaster != null) cardReportDisaster.setOnClickListener(v -> launchPreview(R.layout.report_disaster_form));
+            if (cardRequestBrgyId != null) cardRequestBrgyId.setOnClickListener(v -> launchPreview(R.layout.request_brgy_id));
+            if (cardRequestHistory != null) cardRequestHistory.setOnClickListener(v -> launchPreview(R.layout.request_history));
+            if (cardEmergencyContacts != null) cardEmergencyContacts.setOnClickListener(v -> launchPreview(R.layout.emergency_contacts_list));
+            if (cardAiChatbot != null) cardAiChatbot.setOnClickListener(v -> launchPreview(R.layout.ai_chatbot));
+            if (cardCalendar != null) cardCalendar.setOnClickListener(v -> launchPreview(R.layout.calendar));
+            if (cardAnnouncements != null) cardAnnouncements.setOnClickListener(v -> launchPreview(R.layout.announcements));
+        }
+
+        // ====================================================================
+        // HISTORY FILTER LOGIC
+        // ====================================================================
+        if (layoutId == R.layout.request_history) {
+            CardView chipAll = findViewById(R.id.chipHistoryAll);
+            CardView chipDocs = findViewById(R.id.chipHistoryDocuments);
+            CardView chipReports = findViewById(R.id.chipHistoryReports);
+            
+            TextView tvAll = findViewById(R.id.tvChipHistoryAll);
+            TextView tvDocs = findViewById(R.id.tvChipHistoryDocuments);
+            TextView tvReports = findViewById(R.id.tvChipHistoryReports);
+            
+            RecyclerView rvRequests = findViewById(R.id.rvRequests);
+            LinearLayout layoutEmptyState = findViewById(R.id.layoutEmptyStateRequests);
+
+            if (chipAll != null && chipDocs != null && chipReports != null) {
+                
+                RecyclerView.Adapter<RecyclerView.ViewHolder> historyAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+                    @NonNull
+                    @Override
+                    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_request_history, parent, false);
+                        return new RecyclerView.ViewHolder(view) {};
+                    }
+
+                    @Override
+                    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                        TextView tvType = holder.itemView.findViewById(R.id.tvRequestType);
+                        TextView tvDesc = holder.itemView.findViewById(R.id.tvRequestDesc);
+                        TextView tvDate = holder.itemView.findViewById(R.id.tvRequestDate);
+                        TextView tvStatus = holder.itemView.findViewById(R.id.tvRequestStatus);
+                        CardView cardStatus = holder.itemView.findViewById(R.id.cardRequestStatus);
+                        View colorStrip = holder.itemView.findViewById(R.id.statusColorStrip);
+
+                        try {
+                            JSONObject req = filteredRequests.get(position);
+                            
+                            tvType.setText(req.getString("requestType"));
+                            tvDesc.setText(req.getString("description"));
+                            tvDate.setText(req.getString("dateSubmitted"));
+                            tvStatus.setText(req.getString("status"));
+                            
+                            tvStatus.setTextColor(Color.parseColor(req.getString("statusColorHex")));
+                            cardStatus.setCardBackgroundColor(Color.parseColor(req.getString("statusBgHex")));
+                            colorStrip.setBackgroundColor(Color.parseColor(req.getString("statusColorHex")));
+                            
+                        } catch (Exception e) {
+                        }
+                    }
+
+                    @Override
+                    public int getItemCount() {
+                        return filteredRequests.size();
+                    }
+                };
+
+                rvRequests.setLayoutManager(new LinearLayoutManager(this));
+                rvRequests.setAdapter(historyAdapter);
+                
+                Runnable updateUI = () -> {
+                    chipAll.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                    tvAll.setTextColor(Color.parseColor("#2A3532"));
+                    
+                    chipDocs.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                    tvDocs.setTextColor(Color.parseColor("#2A3532"));
+                    
+                    chipReports.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                    tvReports.setTextColor(Color.parseColor("#2A3532"));
+
+                    filteredRequests.clear();
+                    
+                    if (currentHistoryFilter.equals("All")) {
+                        chipAll.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        tvAll.setTextColor(Color.parseColor("#FFFFFF"));
+                        filteredRequests.addAll(allRequests);
+                    } 
+                    else if (currentHistoryFilter.equals("Documents")) {
+                        chipDocs.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        tvDocs.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject req : allRequests) {
+                            if (req.optString("requestType").contains("Document") || req.optString("requestType").contains("ID")) {
+                                filteredRequests.add(req);
+                            }
+                        }
+                    } 
+                    else if (currentHistoryFilter.equals("Reports")) {
+                        chipReports.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        tvReports.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject req : allRequests) {
+                            if (req.optString("requestType").contains("Report")) {
+                                filteredRequests.add(req);
+                            }
+                        }
+                    }
+                    
+                    historyAdapter.notifyDataSetChanged();
+                    
+                    if (filteredRequests.isEmpty()) {
+                        rvRequests.setVisibility(View.GONE);
+                        layoutEmptyState.setVisibility(View.VISIBLE);
+                    } else {
+                        rvRequests.setVisibility(View.VISIBLE);
+                        layoutEmptyState.setVisibility(View.GONE);
+                    }
+                };
+
+                updateUI.run();
+
+                chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; updateUI.run(); });
+                chipDocs.setOnClickListener(v -> { currentHistoryFilter = "Documents"; updateUI.run(); });
+                chipReports.setOnClickListener(v -> { currentHistoryFilter = "Reports"; updateUI.run(); });
+            }
+        }
+
 
         // ====================================================================
         // INTERACTIVE DEMO LOGIC FOR "CALENDAR"
@@ -39,7 +202,6 @@ public class PreviewActivity extends AppCompatActivity {
 
             if (rvGrid != null && rvEvents != null && tvUpcomingHeader != null && layoutEmptyState != null) {
                 
-                // Initialize the Events List Adapter (We will notify it when data changes)
                 RecyclerView.Adapter<RecyclerView.ViewHolder> eventsAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     @NonNull
                     @Override
@@ -56,7 +218,6 @@ public class PreviewActivity extends AppCompatActivity {
                         TextView tvCategory = holder.itemView.findViewById(R.id.tvEventCategory);
                         CardView cardCategory = holder.itemView.findViewById(R.id.cardEventCategory);
                         
-                        // If a specific day with an event is selected
                         if (selectedDay == 11) {
                             tvDay.setText("11");
                             tvTitle.setText("Water interruption on Rizal St.");
@@ -81,7 +242,6 @@ public class PreviewActivity extends AppCompatActivity {
                             tvCategory.setTextColor(Color.parseColor("#DBA03B"));
                             cardCategory.setCardBackgroundColor(Color.parseColor("#FDF1DA"));
                         }
-                        // Default view (Upcoming)
                         else {
                             if (position == 0) {
                                 tvDay.setText("11");
@@ -103,20 +263,15 @@ public class PreviewActivity extends AppCompatActivity {
 
                     @Override
                     public int getItemCount() {
-                        if (selectedDay == 11 || selectedDay == 14 || selectedDay == 22) {
-                            return 1; // Only show 1 event if a specific date is clicked
-                        } else if (selectedDay == -1) {
-                            return 2; // Show 2 upcoming events by default
-                        } else {
-                            return 0; // Show 0 events if a blank day is clicked
-                        }
+                        if (selectedDay == 11 || selectedDay == 14 || selectedDay == 22) return 1;
+                        else if (selectedDay == -1) return 2;
+                        else return 0;
                     }
                 };
 
                 rvEvents.setLayoutManager(new LinearLayoutManager(this));
                 rvEvents.setAdapter(eventsAdapter);
 
-                // Initialize the Grid Adapter
                 RecyclerView.Adapter<RecyclerView.ViewHolder> gridAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     @NonNull
                     @Override
@@ -136,11 +291,10 @@ public class PreviewActivity extends AppCompatActivity {
                         if (dayNum > 0 && dayNum <= 30) {
                             tvDay.setText(String.valueOf(dayNum));
                             
-                            // Check if this date is currently "selected"
                             if (dayNum == selectedDay) {
-                                background.setCardBackgroundColor(Color.parseColor("#DDF0EC")); // Light teal selection highlight
+                                background.setCardBackgroundColor(Color.parseColor("#DDF0EC"));
                                 tvDay.setTextColor(Color.parseColor("#174A45"));
-                            } else if (dayNum == 9 && selectedDay == -1) { // Default highlight for "today"
+                            } else if (dayNum == 9 && selectedDay == -1) {
                                 background.setCardBackgroundColor(Color.parseColor("#0D4A41"));
                                 tvDay.setTextColor(Color.parseColor("#FFFFFF"));
                             } else {
@@ -148,23 +302,15 @@ public class PreviewActivity extends AppCompatActivity {
                                 tvDay.setTextColor(Color.parseColor("#11231D"));
                             }
                             
-                            if (dayNum == 11 || dayNum == 14 || dayNum == 22) {
-                                dot.setVisibility(View.VISIBLE);
-                            } else {
-                                dot.setVisibility(View.INVISIBLE);
-                            }
+                            if (dayNum == 11 || dayNum == 14 || dayNum == 22) dot.setVisibility(View.VISIBLE);
+                            else dot.setVisibility(View.INVISIBLE);
 
-                            // Click Listener for the day!
                             holder.itemView.setOnClickListener(v -> {
                                 selectedDay = dayNum;
-                                notifyDataSetChanged(); // Refresh grid selection UI
+                                notifyDataSetChanged(); 
+                                tvUpcomingHeader.setText(String.format(Locale.US, "Sept %d's events", dayNum));
+                                eventsAdapter.notifyDataSetChanged(); 
                                 
-                                // Update the bottom list
-                                tvUpcomingHeader.setText("Sept " + dayNum + "'s events");
-                                
-                                eventsAdapter.notifyDataSetChanged(); // Refresh list data
-                                
-                                // Toggle Empty State
                                 if (dayNum != 11 && dayNum != 14 && dayNum != 22) {
                                     rvEvents.setVisibility(View.GONE);
                                     layoutEmptyState.setVisibility(View.VISIBLE);
@@ -173,7 +319,6 @@ public class PreviewActivity extends AppCompatActivity {
                                     layoutEmptyState.setVisibility(View.GONE);
                                 }
                             });
-
                         } else {
                             if (dayNum <= 0) tvDay.setText(String.valueOf(30 + dayNum));
                             else tvDay.setText(String.valueOf(dayNum - 30));
@@ -181,7 +326,7 @@ public class PreviewActivity extends AppCompatActivity {
                             tvDay.setTextColor(Color.parseColor("#DFE2DD"));
                             background.setCardBackgroundColor(Color.TRANSPARENT);
                             dot.setVisibility(View.INVISIBLE);
-                            holder.itemView.setOnClickListener(null); // Disable clicks for faded days
+                            holder.itemView.setOnClickListener(null);
                         }
                     }
 
@@ -246,6 +391,34 @@ public class PreviewActivity extends AppCompatActivity {
                     dialog.show();
                 });
             }
+        }
+    }
+
+    private void launchPreview(int layoutId) {
+        Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+        intent.putExtra("LAYOUT_ID", layoutId);
+        startActivity(intent);
+    }
+
+    private void loadMockData() {
+        try {
+            InputStream is = getAssets().open("mock_data.json");
+            int size = is.available();
+            byte[] buffer = new byte[size];
+            int bytesRead = is.read(buffer);
+            is.close();
+            
+            if (bytesRead > 0) {
+                String jsonStr = new String(buffer, StandardCharsets.UTF_8);
+                JSONObject obj = new JSONObject(jsonStr);
+                JSONArray requestsArray = obj.getJSONArray("requests");
+
+                allRequests.clear();
+                for (int i = 0; i < requestsArray.length(); i++) {
+                    allRequests.add(requestsArray.getJSONObject(i));
+                }
+            }
+        } catch (Exception ex) {
         }
     }
 }

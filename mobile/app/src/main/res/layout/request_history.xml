@@ -54,13 +54,18 @@
 
                 <!-- Selected Chip -->
                 <androidx.cardview.widget.CardView
+                    android:id="@+id/chipHistoryAll"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="12dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground"
                     app:cardBackgroundColor="#0D4A41"
                     app:cardCornerRadius="20dp"
                     app:cardElevation="2dp">
                     <TextView
+                        android:id="@+id/tvChipHistoryAll"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:paddingHorizontal="20dp"
@@ -72,13 +77,18 @@
 
                 <!-- Unselected Chip -->
                 <androidx.cardview.widget.CardView
+                    android:id="@+id/chipHistoryDocuments"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="12dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground"
                     app:cardBackgroundColor="#FFFFFF"
                     app:cardCornerRadius="20dp"
                     app:cardElevation="2dp">
                     <TextView
+                        android:id="@+id/tvChipHistoryDocuments"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:paddingHorizontal="20dp"
@@ -90,13 +100,18 @@
 
                 <!-- Unselected Chip -->
                 <androidx.cardview.widget.CardView
+                    android:id="@+id/chipHistoryReports"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="12dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground"
                     app:cardBackgroundColor="#FFFFFF"
                     app:cardCornerRadius="20dp"
                     app:cardElevation="2dp">
                     <TextView
+                        android:id="@+id/tvChipHistoryReports"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:paddingHorizontal="20dp"
