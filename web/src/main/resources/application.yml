@@ -1,0 +1,24 @@
+server: 
+  port: 8080
+
+spring:
+  application:
+    name: portal
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/brgy_portal_db
+    username: postgres
+    password: alucard
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+firebase:
+  config-path: classpath:firebase-service-account.json
