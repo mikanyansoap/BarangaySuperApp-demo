@@ -152,13 +152,27 @@ public class PreviewActivity extends AppCompatActivity {
                         // Instantly scroll to the bottom so the user sees their message
                         rvChatMessages.scrollToPosition(messages.size() - 1);
 
-                        // 2. Simulate AI bot thinking and returning "error" (since no backend is connected yet)
-                        // We use a postDelayed to make it feel like the bot is actually typing
-                        rvChatMessages.postDelayed(() -> {
-                            messages.add(new Pair<>(false, "Error: Cannot connect to AI server. Please try again later."));
-                            chatAdapter.notifyItemInserted(messages.size() - 1);
-                            rvChatMessages.scrollToPosition(messages.size() - 1);
-                        }, 800); // 800 milliseconds delay
+                        // 2. Call the REAL Gemini AI Backend!
+                        GeminiApiClient.sendMessage(userText, new GeminiApiClient.ChatCallback() {
+                            @Override
+                            public void onSuccess(String responseText) {
+                                // We must update the UI on the main thread
+                                runOnUiThread(() -> {
+                                    messages.add(new Pair<>(false, responseText));
+                                    chatAdapter.notifyItemInserted(messages.size() - 1);
+                                    rvChatMessages.scrollToPosition(messages.size() - 1);
+                                });
+                            }
+
+                            @Override
+                            public void onError(String errorMessage) {
+                                runOnUiThread(() -> {
+                                    messages.add(new Pair<>(false, errorMessage));
+                                    chatAdapter.notifyItemInserted(messages.size() - 1);
+                                    rvChatMessages.scrollToPosition(messages.size() - 1);
+                                });
+                            }
+                        });
                     }
                 });
             }
