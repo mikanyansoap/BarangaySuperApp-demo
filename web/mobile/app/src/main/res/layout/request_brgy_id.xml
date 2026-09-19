@@ -1,0 +1,537 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F5ED"
+    android:orientation="vertical">
+
+    <!-- Top App Bar with Back Button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="16dp"
+        android:background="#FFFFFF"
+        android:elevation="4dp">
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/btnGoBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?android:attr/selectableItemBackground">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="←"
+                android:textColor="#11231D"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+        </androidx.cardview.widget.CardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="Barangay ID"
+            android:textColor="#11231D"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="32dp"
+            android:paddingBottom="40dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="2dp"
+                android:text="Apply for a new ID, renew an existing one, or request a transfer to this barangay."
+                android:textColor="#737973"
+                android:textSize="14sp" />
+
+            <!-- The trigger button to show the modal -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/btnOpenApplicationModal"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="24dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
+                app:cardBackgroundColor="#174A45"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp">
+
+                <TextView
+                    android:id="@+id/tvSelectedApplicationType"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="Select Application Type"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- SECTION 2: MISMATCH WARNING OVERLAY -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/layoutBarangayMismatch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                app:cardBackgroundColor="#FDF1DA"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚠️ Address Mismatch Detected"
+                        android:textColor="#DBA03B"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="The barangay on your scanned ID does not match this barangay's records. Are you requesting to transfer your residency here?"
+                        android:textColor="#6A756F"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal">
+
+                        <androidx.cardview.widget.CardView
+                            android:id="@+id/btnMismatchNo"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            app:cardBackgroundColor="#FFFFFF"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="#DFE2DD"
+                            app:strokeWidth="1dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="No, edit details"
+                                android:textColor="#2A3532"
+                                android:textStyle="bold" />
+                        </androidx.cardview.widget.CardView>
+
+                        <androidx.cardview.widget.CardView
+                            android:id="@+id/btnMismatchYes"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            app:cardBackgroundColor="#DBA03B"
+                            app:cardCornerRadius="8dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="Yes (Transfer)"
+                                android:textColor="#FFFFFF"
+                                android:textStyle="bold" />
+                        </androidx.cardview.widget.CardView>
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+
+            <!-- SECTION 3: TRANSFER SPECIFIC FORM -->
+            <LinearLayout
+                android:id="@+id/layoutTransferForm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="To process your transfer, please provide proof of your new residency. You will be notified once approved."
+                    android:textColor="#737973"
+                    android:textSize="14sp" />
+
+                <!-- Upload ID -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Valid ID"
+                    android:textColor="#2A3532"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="📷 Tap to upload Valid ID"
+                        android:textColor="#247D76"
+                        android:textStyle="bold" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Upload Proof of Residency -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Proof of Residency (Billing, Lease, etc.)"
+                    android:textColor="#2A3532"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="📄 Tap to upload Proof of Residency"
+                        android:textColor="#247D76"
+                        android:textStyle="bold" />
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="32dp"
+                    app:cardBackgroundColor="#174A45"
+                    app:cardCornerRadius="12dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="Submit Transfer Request"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+
+
+            <!-- SECTION 4: MAIN APPLICATION FORM -->
+            <LinearLayout
+                android:id="@+id/layoutMainForm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <!-- UPLOAD SECTION (For AI Autofill) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
+
+                    <androidx.cardview.widget.CardView
+                        android:id="@+id/btnScanId"
+                        android:layout_width="0dp"
+                        android:layout_height="80dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        app:cardBackgroundColor="#DDF0EC"
+                        app:cardCornerRadius="12dp"
+                        app:cardElevation="0dp"
+                        android:clickable="true"
+                        android:focusable="true">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="📷 Scan ID"
+                                android:textColor="#247D76"
+                                android:textStyle="bold"/>
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Autofills form"
+                                android:textColor="#247D76"
+                                android:textSize="10sp"
+                                android:layout_marginTop="4dp"/>
+                        </LinearLayout>
+                    </androidx.cardview.widget.CardView>
+
+                    <androidx.cardview.widget.CardView
+                        android:id="@+id/btnTakeSelfie"
+                        android:layout_width="0dp"
+                        android:layout_height="80dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        app:cardBackgroundColor="#FCEBEA"
+                        app:cardCornerRadius="12dp"
+                        app:cardElevation="0dp"
+                        android:clickable="true"
+                        android:focusable="true">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🤳 Selfie"
+                                android:textColor="#CC4E42"
+                                android:textStyle="bold"/>
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="For verification"
+                                android:textColor="#CC4E42"
+                                android:textSize="10sp"
+                                android:layout_marginTop="4dp"/>
+                        </LinearLayout>
+                    </androidx.cardview.widget.CardView>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="Personal Details"
+                    android:textColor="#11231D"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <!-- Name Fields -->
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etFormFirstName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="First Name" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etFormMiddleName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Middle Name" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etFormLastName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Last Name" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Demographics (Row) -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                    <androidx.cardview.widget.CardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                        <EditText android:id="@+id/etFormDOB" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Date of Birth" android:paddingHorizontal="16dp" android:textSize="14sp" android:focusable="false" android:clickable="true" />
+                    </androidx.cardview.widget.CardView>
+                    <androidx.cardview.widget.CardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                        <Spinner android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:paddingHorizontal="12dp" />
+                    </androidx.cardview.widget.CardView>
+                </LinearLayout>
+
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <Spinner android:id="@+id/spinnerCivilStatus" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:paddingHorizontal="12dp" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Address & Contact -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="Address &amp; Contact"
+                    android:textColor="#11231D"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etCurrentAddress" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Current Address (in Dasma)" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPostalAddress" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etProvincialAddress" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Provincial Address (Optional)" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPostalAddress" />
+                </androidx.cardview.widget.CardView>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                    <androidx.cardview.widget.CardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                        <EditText android:id="@+id/etCellNo" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Cell No." android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="phone" />
+                    </androidx.cardview.widget.CardView>
+                    <androidx.cardview.widget.CardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                        <EditText android:id="@+id/etLengthOfStay" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Stay in Brgy (Yrs)" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="number" />
+                    </androidx.cardview.widget.CardView>
+                </LinearLayout>
+
+                <!-- Family & Work -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="Family &amp; Work Details"
+                    android:textColor="#11231D"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etFatherName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Father's Name" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etMotherName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Mother's Name (Maiden)" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etEmployerName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Employer's Name (Optional)" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Emergency Contact Details -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="Emergency Contact Details"
+                    android:textColor="#11231D"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etEmergencyName" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Contact Person Name" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etEmergencyRel" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Relationship" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <EditText android:id="@+id/etEmergencyPhone" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="Contact Number" android:paddingHorizontal="16dp" android:textSize="14sp" android:inputType="phone" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Classification -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="Classification"
+                    android:textColor="#11231D"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <Spinner android:id="@+id/spinnerClassification" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:paddingHorizontal="12dp" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Biometrics & Interview Appointment -->
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="32dp"
+                    app:cardBackgroundColor="#FDF1DA"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Biometrics &amp; Interview"
+                            android:textColor="#DBA03B"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Select an appointment date below to visit the barangay hall to complete your thumbprints, signature, and quick interview."
+                            android:textColor="#6A756F"
+                            android:textSize="14sp" />
+
+                        <androidx.cardview.widget.CardView
+                            android:id="@+id/btnSelectAppointment"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="16dp"
+                            app:cardBackgroundColor="#FFFFFF"
+                            app:cardCornerRadius="8dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:id="@+id/tvAppointmentDate"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="📅 Choose Date &amp; Time"
+                                android:textColor="#2A3532"
+                                android:textStyle="bold" />
+                        </androidx.cardview.widget.CardView>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Submit Button -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/btnSubmitForm"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="32dp"
+                    app:cardBackgroundColor="#174A45"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="Submit Application"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

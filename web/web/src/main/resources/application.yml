@@ -6,9 +6,9 @@ spring:
     name: portal
   
   datasource:
-    url: jdbc:postgresql://aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?sslmode=require
-    username: postgres.wjrabyrmhymwtvcjywea
-    password: vAVvcvopZlv2m4N9
+    url: jdbc:postgresql://localhost:5432/brgy_portal_db
+    username: postgres
+    password: alucard
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -18,6 +18,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
-gemini:
-  api-key: "AQ.Ab8RN6Iawgtoym2mMhXx4WROWJJfEr7k2zaoERl9MsuIRHlNJA"
+firebase:
+  config-path: classpath:firebase-service-account.json
