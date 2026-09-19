@@ -40,6 +40,12 @@ public class PSGCClient {
                         for (int i = 0; i < array.length(); i++) {
                             provinces.add(array.getJSONObject(i).getString("name"));
                         }
+                        
+                        // Add Metro Manila manually since it's a region (NCR) and not returned in the /provinces API endpoint
+                        if (!provinces.contains("Metro Manila")) {
+                            provinces.add("Metro Manila");
+                        }
+                        
                         // Sort alphabetically for better UX
                         Collections.sort(provinces);
                         callback.onSuccess(provinces);

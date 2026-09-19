@@ -333,13 +333,18 @@
                     app:cardBackgroundColor="#FFFFFF"
                     app:cardCornerRadius="8dp"
                     app:cardElevation="0dp">
-                    <Spinner
+                    <AutoCompleteTextView
                         android:id="@+id/spinnerProvince"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:background="@android:color/transparent"
                         android:paddingHorizontal="12dp"
-                        android:spinnerMode="dropdown" />
+                        android:hint="Type or select province..."
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="14sp"
+                        android:completionThreshold="1"
+                        android:inputType="textNoSuggestions" />
                     <!-- Visual Dropdown Arrow -->
                     <TextView
                         android:layout_width="wrap_content"
@@ -367,13 +372,18 @@
                     app:cardBackgroundColor="#FFFFFF"
                     app:cardCornerRadius="8dp"
                     app:cardElevation="0dp">
-                    <Spinner
+                    <AutoCompleteTextView
                         android:id="@+id/spinnerCity"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:background="@android:color/transparent"
                         android:paddingHorizontal="12dp"
-                        android:spinnerMode="dropdown" />
+                        android:hint="Type or select city..."
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="14sp"
+                        android:completionThreshold="1"
+                        android:inputType="textNoSuggestions" />
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -400,13 +410,18 @@
                     app:cardBackgroundColor="#FFFFFF"
                     app:cardCornerRadius="8dp"
                     app:cardElevation="0dp">
-                    <Spinner
+                    <AutoCompleteTextView
                         android:id="@+id/spinnerBarangay"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:background="@android:color/transparent"
                         android:paddingHorizontal="12dp"
-                        android:spinnerMode="dropdown" />
+                        android:hint="Type or select barangay..."
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="14sp"
+                        android:completionThreshold="1"
+                        android:inputType="textNoSuggestions" />
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
