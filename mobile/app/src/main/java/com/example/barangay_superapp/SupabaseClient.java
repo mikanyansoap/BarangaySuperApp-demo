@@ -1,27 +1,45 @@
 package com.example.barangay_superapp;
 
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
+import org.json.JSONObject;
 
 public class SupabaseClient {
-    // IMPORTANT: We still need your project URL (e.g., https://xyz.supabase.co)
-    public static final String SUPABASE_URL = "YOUR_SUPABASE_URL_HERE"; 
+    // Deduced the Supabase Project URL based on your Supabase dashboard link!
+    public static final String SUPABASE_URL = "https://iglrczxuzljczcibvoif.supabase.co"; 
     
-    // It is completely safe to use the PUBLIC / PUBLISHABLE key in the app
     public static final String SUPABASE_PUBLIC_KEY = "sb_publishable_eKmPItxbga4MB9Rn2JuMJw_04jCCvGE";
-    
-    // NOTE: DO NOT PUT YOUR SECRET KEY IN THE APP!
-    // The secret key bypasses all security rules. If a hacker decompiles your app and finds the secret key,
-    // they can delete your entire database. The secret key is only for server-side code (like Node.js).
     
     private static final OkHttpClient client = new OkHttpClient();
 
-    // A helper method to easily build Supabase network requests
     public static Request.Builder getAuthenticatedBuilder(String endpoint) {
         return new Request.Builder()
                 .url(SUPABASE_URL + endpoint)
                 .addHeader("apikey", SUPABASE_PUBLIC_KEY)
                 .addHeader("Authorization", "Bearer " + SUPABASE_PUBLIC_KEY)
                 .addHeader("Content-Type", "application/json");
+    }
+
+    // Handles User Sign Up via Supabase Auth REST API
+    public static void signUpUser(String email, String password, JSONObject userData, Callback callback) {
+        try {
+            JSONObject bodyJson = new JSONObject();
+            bodyJson.put("email", email);
+            bodyJson.put("password", password);
+            bodyJson.put("data", userData); // Supabase puts this inside 'user_metadata'
+
+            RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = getAuthenticatedBuilder("/auth/v1/signup")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

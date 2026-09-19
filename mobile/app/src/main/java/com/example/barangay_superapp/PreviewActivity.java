@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Pair;
 import android.view.View;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
@@ -17,16 +18,24 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.Response;
 
 public class PreviewActivity extends AppCompatActivity {
     
@@ -79,6 +88,95 @@ public class PreviewActivity extends AppCompatActivity {
                     datePickerDialog.getDatePicker().setMaxDate(System.currentTimeMillis());
                     
                     datePickerDialog.show();
+                });
+            }
+        }
+
+        // ====================================================================
+        // SIGN UP FORM LOGIC -> SUPABASE INTEGRATION
+        // ====================================================================
+        if (layoutId == R.layout.sign_up) {
+            CardView btnCreateAccount = findViewById(R.id.btnCreateAccount);
+            EditText etFirstName = findViewById(R.id.etFirstName);
+            EditText etLastName = findViewById(R.id.etLastName);
+            EditText etMobileNumber = findViewById(R.id.etMobileNumber);
+            EditText etEmail = findViewById(R.id.etEmail);
+            EditText etSignUpPassword = findViewById(R.id.etSignUpPassword);
+            CheckBox cbTerms = findViewById(R.id.cbTerms);
+            TextView tvSignInRedirect = findViewById(R.id.tvSignInRedirect);
+
+            if (tvSignInRedirect != null) {
+                tvSignInRedirect.setOnClickListener(v -> {
+                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                    intent.putExtra("LAYOUT_ID", R.layout.sign_in);
+                    startActivity(intent);
+                    finish();
+                });
+            }
+
+            if (btnCreateAccount != null) {
+                btnCreateAccount.setOnClickListener(v -> {
+                    String email = etEmail != null ? etEmail.getText().toString().trim() : "";
+                    String password = etSignUpPassword != null ? etSignUpPassword.getText().toString() : "";
+                    String firstName = etFirstName != null ? etFirstName.getText().toString().trim() : "";
+                    String lastName = etLastName != null ? etLastName.getText().toString().trim() : "";
+                    String phone = etMobileNumber != null ? etMobileNumber.getText().toString().trim() : "";
+
+                    // Simple frontend validation
+                    if (email.isEmpty() || password.isEmpty() || firstName.isEmpty() || lastName.isEmpty()) {
+                        Toast.makeText(this, "Please fill in all required fields", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (cbTerms != null && !cbTerms.isChecked()) {
+                        Toast.makeText(this, "Please agree to the Terms and Conditions", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    Toast.makeText(this, "Creating account...", Toast.LENGTH_SHORT).show();
+
+                    try {
+                        // Package user info for Supabase 'user_metadata'
+                        JSONObject userData = new JSONObject();
+                        userData.put("first_name", firstName);
+                        userData.put("last_name", lastName);
+                        userData.put("phone", "+63" + phone); 
+
+                        // Trigger the Supabase network call!
+                        SupabaseClient.signUpUser(email, password, userData, new Callback() {
+                            @Override
+                            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                                runOnUiThread(() -> Toast.makeText(PreviewActivity.this, "Network Error: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                            }
+
+                            @Override
+                            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                                String responseBody = response.body() != null ? response.body().string() : "";
+                                runOnUiThread(() -> {
+                                    if (response.isSuccessful()) {
+                                        // SUCCESS! 
+                                        Toast.makeText(PreviewActivity.this, "Account Created Successfully!", Toast.LENGTH_LONG).show();
+                                        
+                                        // Transition to Account Review notification screen
+                                        Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                                        intent.putExtra("LAYOUT_ID", R.layout.account_review_ntf);
+                                        startActivity(intent);
+                                        finish();
+                                    } else {
+                                        // HANDLE SUPABASE ERRORS (e.g. Email already registered)
+                                        try {
+                                            JSONObject errorJson = new JSONObject(responseBody);
+                                            String errorMsg = errorJson.optString("msg", "Unknown error occurred");
+                                            Toast.makeText(PreviewActivity.this, "Error: " + errorMsg, Toast.LENGTH_LONG).show();
+                                        } catch (Exception ex) {
+                                            Toast.makeText(PreviewActivity.this, "Sign Up Failed", Toast.LENGTH_SHORT).show();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 });
             }
         }
