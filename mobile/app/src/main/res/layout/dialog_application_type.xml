@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="24dp"
+    app:cardBackgroundColor="#F5F5ED"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Select Application Type"
+            android:textColor="#11231D"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="Choose the type of Barangay ID request you are making."
+            android:textColor="#737973"
+            android:textSize="14sp" />
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            app:cardBackgroundColor="#FFFFFF"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <RadioGroup
+                android:id="@+id/rgApplicationType"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <RadioButton
+                    android:id="@+id/rbNewApplicant"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:buttonTint="#247D76"
+                    android:text="New Applicant"
+                    android:textColor="#11231D"
+                    android:textSize="16sp" />
+
+                <RadioButton
+                    android:id="@+id/rbRenewal"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:buttonTint="#247D76"
+                    android:text="Renewal"
+                    android:textColor="#11231D"
+                    android:textSize="16sp" />
+
+                <RadioButton
+                    android:id="@+id/rbTransfer"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:buttonTint="#247D76"
+                    android:text="Transfer from another Barangay"
+                    android:textColor="#11231D"
+                    android:textSize="16sp" />
+            </RadioGroup>
+        </androidx.cardview.widget.CardView>
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/btnProceedType"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?android:attr/selectableItemBackground"
+            app:cardBackgroundColor="#174A45"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Proceed"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </androidx.cardview.widget.CardView>
+
+        <!-- Cancel button just in case they want to back out of the form entirely -->
+        <TextView
+            android:id="@+id/btnCancelModal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="Cancel"
+            android:textColor="#8D9691"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
