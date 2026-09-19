@@ -220,6 +220,15 @@
                         android:textStyle="bold" />
                 </androidx.cardview.widget.CardView>
 
+                <!-- Max File Size Hint -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Maximum file size: 10MB"
+                    android:textColor="#8D9691"
+                    android:textSize="12sp" />
+
                 <!-- Upload Proof of Residency -->
                 <TextView
                     android:layout_width="wrap_content"
@@ -242,6 +251,15 @@
                         android:textColor="#247D76"
                         android:textStyle="bold" />
                 </androidx.cardview.widget.CardView>
+
+                <!-- Max File Size Hint -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Maximum file size: 10MB"
+                    android:textColor="#8D9691"
+                    android:textSize="12sp" />
 
                 <androidx.cardview.widget.CardView
                     android:layout_width="match_parent"

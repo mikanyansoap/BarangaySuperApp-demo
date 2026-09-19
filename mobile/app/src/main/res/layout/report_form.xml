@@ -239,6 +239,15 @@
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
+                <!-- Max File Size Hint -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Maximum file size: 10MB"
+                    android:textColor="#8D9691"
+                    android:textSize="12sp" />
+
             </LinearLayout>
 
             <!-- Submit Button -->
