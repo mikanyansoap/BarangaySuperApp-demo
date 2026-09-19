@@ -123,77 +123,7 @@
                         android:textStyle="bold" />
                 </androidx.cardview.widget.CardView>
 
-                <!-- TEMPORARY DEV MENU CONTAINER -->
-                <LinearLayout
-                    android:id="@+id/devContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:background="#DDF0EC"
-                    android:orientation="vertical"
-                    android:padding="16dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="Developer Menu"
-                        android:textColor="#174A45"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <androidx.cardview.widget.CardView
-                            android:layout_width="0dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="8dp"
-                            android:layout_weight="1"
-                            app:cardBackgroundColor="#FFFFFF"
-                            app:cardCornerRadius="8dp"
-                            app:cardElevation="0dp">
-
-                            <Spinner
-                                android:id="@+id/spinnerDev"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@android:color/transparent"
-                                android:paddingHorizontal="12dp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_gravity="end|center_vertical"
-                                android:paddingEnd="12dp"
-                                android:text="▼"
-                                android:textColor="#2A3532"
-                                android:textSize="12sp" />
-                        </androidx.cardview.widget.CardView>
-
-                        <androidx.cardview.widget.CardView
-                            android:id="@+id/btnGoDev"
-                            android:layout_width="60dp"
-                            android:layout_height="48dp"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:foreground="?android:attr/selectableItemBackground"
-                            app:cardBackgroundColor="#174A45"
-                            app:cardCornerRadius="8dp"
-                            app:cardElevation="0dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_gravity="center"
-                                android:text="Go"
-                                android:textColor="#FFFFFF"
-                                android:textStyle="bold" />
-                        </androidx.cardview.widget.CardView>
-                    </LinearLayout>
-                </LinearLayout>
 
                 <!-- Spacer to balance centering -->
                 <View
