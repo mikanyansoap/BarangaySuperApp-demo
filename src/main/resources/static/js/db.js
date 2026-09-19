@@ -1,64 +1,236 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { 
-    getAuth, 
-    signInWithEmailAndPassword, 
-    signOut, 
-    onAuthStateChanged 
-} from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyB4XP_dS7suaSnoFZW-_JWCE-oz-uhrC-w",
-  authDomain: "brgysuperapp-admin.firebaseapp.com",
-  projectId: "brgysuperapp-admin",
-  storageBucket: "brgysuperapp-admin.firebasestorage.app",
-  messagingSenderId: "650823276246",
-  appId: "1:650823276246:web:7e6859f2970da07fe05b77",
-  measurementId: "G-2Z05PYPVG6"
+const SUPABASE_URL = 'https://wjrabyrmhymwtvcjywea.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_eKmPItxbga4MB9Rn2JuMJw_04jCCvGE';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+export const DataService = {
+
+  async login(email, password) {
+    if (!email || !password) throw new Error("Email and password required.");
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password.trim()
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async logout() {
+    return await supabase.auth.signOut();
+  },
+
+  async getUserProfile(userId) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, barangays(name)')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Could not fetch profile from database:", error);
+      return null;
+    }
+    return data;
+  },
+
+  async getReports(barangayId = 1) {
+    const { data, error } = await supabase
+      .from('reports')
+      .select('*')
+      .eq('barangay_id', barangayId)
+      .order('id', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async getReportById(id) {
+    const { data, error } = await supabase
+      .from('reports')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateReport(id, updates) {
+    const { data, error } = await supabase
+      .from('reports')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async getApprovals(barangayId = 1) {
+    const { data, error } = await supabase
+      .from('resident_approvals')
+      .select('*')
+      .eq('barangay_id', barangayId)
+      .order('id', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(a => ({
+      ...a,
+      name: a.full_name || a.name,
+      idType: a.id_type || a.idType,
+      idNumber: a.id_number || a.idNumber,
+      date: a.date || 'Recent'
+    }));
+  },
+
+  async updateApprovalStatus(id, status) {
+    const { data, error } = await supabase
+      .from('resident_approvals')
+      .update({ status })
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async getDocuments(barangayId = 1) {
+    const { data, error } = await supabase
+      .from('document_requests')
+      .select('*')
+      .eq('barangay_id', barangayId)
+      .order('id', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(d => ({
+      ...d,
+      name: d.resident_name || d.name,
+      type: d.document_type || d.type,
+      pickup: d.pickup_date || d.pickup
+    }));
+  },
+
+  async updateDocument(id, updates) {
+    const { data, error } = await supabase
+      .from('document_requests')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async getAnnouncements(barangayId = 1) {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .eq('barangay_id', barangayId)
+      .order('id', { ascending: false });
+
+    if (error) throw error;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    return (data || []).map(a => {
+      const isPastDate = a.event_date ? a.event_date < todayStr : false;
+      const isArchived = Boolean(a.is_archived || isPastDate);
+
+      return {
+        ...a,
+        tag: a.category || a.tag,
+        posted: a.created_at ? new Date(a.created_at).toLocaleDateString() : 'Recent',
+        isArchived: isArchived,
+        is_archived: isArchived
+      };
+    });
+  },
+
+  async createAnnouncement({ title, description, eventDate, category, barangayId = 1 }) {
+    const { data, error } = await supabase
+      .from('announcements')
+      .insert([{
+        barangay_id: barangayId,
+        title,
+        description,
+        event_date: eventDate || null,
+        category,
+        is_archived: false
+      }]);
+    if (error) throw error;
+    return data;
+  },
+
+  async updateAnnouncement(id, { title, description, eventDate, category }) {
+    const { data, error } = await supabase
+      .from('announcements')
+      .update({
+        title,
+        description,
+        event_date: eventDate || null,
+        category
+      })
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async archiveAnnouncement(id) {
+    const { data, error } = await supabase
+      .from('announcements')
+      .update({ is_archived: true })
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async unarchiveAnnouncement(id) {
+    const { data, error } = await supabase
+      .from('announcements')
+      .update({ is_archived: false })
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async getEmergencyContacts(barangayId = 1) {
+    const { data, error } = await supabase
+      .from('emergency_contacts')
+      .select('*')
+      .eq('barangay_id', barangayId)
+      .order('id', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(c => ({
+      ...c,
+      num: c.contact_number || c.num || c.number,
+      number: c.contact_number || c.num || c.number
+    }));
+  },
+
+  async createEmergencyContact({ name, category, num, barangayId = 1 }) {
+    const { data, error } = await supabase
+      .from('emergency_contacts')
+      .insert([{
+        barangay_id: barangayId,
+        name,
+        category,
+        contact_number: num
+      }]);
+    if (error) throw error;
+    return data;
+  },
+
+  async updateEmergencyContact(id, { name, category, num }) {
+    const { data, error } = await supabase
+      .from('emergency_contacts')
+      .update({
+        name,
+        category,
+        contact_number: num
+      })
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteEmergencyContact(id) {
+    const { data, error } = await supabase
+      .from('emergency_contacts')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    return data;
+  }
 };
-
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export { signInWithEmailAndPassword, signOut, onAuthStateChanged };
-
-const DEFAULT_DB = {
-  approvals: [
-    { id: 1, name: "Maria Santos", address: "Purok 2, San Isidro", idType: "Barangay ID", idNumber: "BSI-2019-0212", date: "Sept 9" },
-    { id: 2, name: "Carlo Reyes", address: "Purok 5, San Isidro", idType: "Driver's license", idNumber: "N01-23-456789", date: "Sept 8" },
-    { id: 3, name: "Ella Tan", address: "Purok 1, San Isidro", idType: "Passport", idNumber: "P1234567A", date: "Sept 7" }
-  ],
-  reports: [
-    { id: 101, title: "Blocked drainage, Purok 3", meta: "Juan Dela Cruz · Sept 7", priority: "high", status: "pending", category: "Drainage", desc: "Heavy clogging along Purok 3 main drainage after weekend storm.", bg: "brick-100", fg: "brick", notes: "" },
-    { id: 102, title: "Noise disturbance, Rizal St.", meta: "Ana Reyes · Sept 6", priority: "medium", status: "progress", category: "Disturbance", desc: "Loud videoke and street party past 11 PM curfews.", bg: "gold-100", fg: "gold-600", notes: "Barangay Tanod deployed." },
-    { id: 103, title: "Structural damage after storm", meta: "Pedro Cruz · Sept 5", priority: "high", status: "pending", category: "Other", desc: "Cracked perimeter wall near community chapel posing collapse risk.", bg: "brick-100", fg: "brick", notes: "" },
-    { id: 104, title: "Uncollected garbage, Purok 1", meta: "Liza Gomez · Sept 4", priority: "low", status: "resolved", category: "Sanitation", desc: "Dumpster overflow along Purok 1 corner lot.", bg: "sage-100", fg: "#3E6552", notes: "Hauler picked up Sept 5." }
-  ],
-  documents: [
-    { id: 201, type: "Barangay clearance", name: "Ana Reyes", date: "Sept 8", status: "pending", pickup: null },
-    { id: 202, type: "Barangay ID — renewal", name: "Juan Dela Cruz", date: "Sept 8", status: "progress", pickup: "Sept 12" },
-    { id: 203, type: "Certificate of indigency", name: "Mark Villanueva", date: "Sept 7", status: "progress", pickup: null },
-    { id: 204, type: "Business permit endorsement", name: "Liza Gomez", date: "Sept 5", status: "resolved", pickup: "Sept 8" }
-  ],
-  announcements: [
-    { id: 301, tag: "Health", title: "Free anti-rabies vaccination, Sept 14", posted: "Sept 7", day: 14 },
-    { id: 302, tag: "Advisory", title: "Water interruption on Rizal St., Sept 11", posted: "Today", day: 11 },
-    { id: 303, tag: "Event", title: "Barangay assembly, Sept 22, 6pm", posted: "Sept 5", day: 22 }
-  ],
-  pastAnnouncements: [
-    { id: 304, title: "Feeding program results posted", tag: "Health", posted: "Aug 28" },
-    { id: 305, title: "Road closure, Purok 2 bridge repair", tag: "Advisory", posted: "Aug 14" },
-    { id: 306, title: "Founding anniversary celebration", tag: "Event", posted: "Jul 20" }
-  ],
-  emergency: [
-    { id: 401, name: "Barangay hall", cat: "Barangay", num: "(02) 8XXX XXXX" },
-    { id: 402, name: "Barangay captain", cat: "Barangay", num: "09XX XXX XXXX" },
-    { id: 403, name: "Police / national emergency", cat: "National", num: "911" },
-    { id: 404, name: "Bureau of Fire Protection", cat: "National", num: "(02) 8426 0219" }
-  ]
-};
-
-const saved = localStorage.getItem('brgy_admin_db');
-export const DB = saved ? JSON.parse(saved) : DEFAULT_DB;
-
-export function saveDB() {
-  localStorage.setItem('brgy_admin_db', JSON.stringify(DB));
-}

@@ -1,5 +1,6 @@
-import { DB, saveDB, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from './db.js';
-import { fetchReports, updateReportStatus, fetchDocumentRequests, updateDocumentStatus } from './api.js';
+import { DataService } from './db.js';
+
+let calendarViewDate = new Date();
 
 const getCurrentDate = () => {
   const now = new Date();
@@ -27,90 +28,26 @@ function ic(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[name]}</svg>`;
 }
 
-/* =========================================================================
-   Data Service (Spring Boot Backend API with DB.js Mock Fallback)
-   ========================================================================= */
-const DataService = {
-  async getReports() {
-    try {
-      const live = await fetchReports();
-      if (Array.isArray(live) && live.length > 0) {
-        return live.map(r => ({
-          id: r.id,
-          title: r.title,
-          meta: `${r.reporterName || 'Citizen'} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'Recent'}`,
-          priority: (r.status === 'PENDING' ? 'high' : 'medium'),
-          status: (r.status || 'pending').toLowerCase().replace('_', ''),
-          category: r.category || 'General',
-          desc: r.description || 'No additional description provided.',
-          bg: r.status === 'PENDING' ? 'brick-100' : 'gold-100',
-          fg: r.status === 'PENDING' ? 'brick' : 'gold-600',
-          notes: r.adminNotes || ''
-        }));
-      }
-    } catch (_) {}
-    return DB.reports;
-  },
-
-  async updateReportTriage(id, { status, notes }) {
-    try {
-      const backendStatus = status === 'progress' ? 'IN_PROGRESS' : status === 'resolved' ? 'RESOLVED' : 'PENDING';
-      await updateReportStatus(id, backendStatus, notes);
-    } catch (_) {}
-    const r = DB.reports.find(q => q.id === id);
-    if (r) {
-      r.status = status;
-      r.notes = notes;
-      saveDB();
-    }
-  },
-
-  async getDocuments() {
-    try {
-      const live = await fetchDocumentRequests();
-      if (Array.isArray(live) && live.length > 0) {
-        return live.map(d => ({
-          id: d.id,
-          type: d.documentType,
-          name: d.requesterName || 'Requester',
-          date: d.requestedAt ? new Date(d.requestedAt).toLocaleDateString() : 'Recent',
-          status: (d.status || 'pending').toLowerCase(),
-          pickup: d.pickupDate || null
-        }));
-      }
-    } catch (_) {}
-    return DB.documents;
-  },
-
-  async updateDocStatus(id, status, pickup = null, remarks = '') {
-    try {
-      await updateDocumentStatus(id, status.toUpperCase(), pickup, remarks);
-    } catch (_) {}
-    const doc = DB.documents.find(d => d.id === id);
-    if (doc) {
-      doc.status = status;
-      if (pickup) doc.pickup = pickup;
-      saveDB();
-    }
-  },
-
-  async getApprovals() {
-    return DB.approvals;
-  },
-
-  async getAnnouncements() {
-    return {
-      active: DB.announcements,
-      past: DB.pastAnnouncements
-    };
-  }
-};
-
-/* =========================================================================
-   Shell & Modal Infrastructure
-   ========================================================================= */
 const stage = document.getElementById('app-stage');
 const modalRoot = document.getElementById('modal-root');
+
+function getActiveUser() {
+  try {
+    const raw = sessionStorage.getItem('portal_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setActiveUser(userData) {
+  if (userData) {
+    sessionStorage.setItem('portal_user', JSON.stringify(userData));
+  } else {
+    sessionStorage.removeItem('portal_user');
+    sessionStorage.removeItem('portal_access_token');
+  }
+}
 
 function closeModal() {
   if (modalRoot) modalRoot.innerHTML = '';
@@ -120,7 +57,7 @@ window.closeModal = closeModal;
 function openCustomModal({ title, contentHtml, onConfirm, confirmText = 'Save', confirmClass = 'btn-small' }) {
   modalRoot.innerHTML = `
     <div class="modal-overlay">
-      <div class="modal-box" style="width: 440px;">
+      <div class="modal-box" style="width: 460px;">
         <div class="modal-head">
           <h4>${title}</h4>
           <button class="modal-close" id="modal-close-btn">✕</button>
@@ -140,13 +77,16 @@ function openCustomModal({ title, contentHtml, onConfirm, confirmText = 'Save', 
 
   document.getElementById('modal-close-btn').onclick = closeModal;
   document.getElementById('modal-cancel-btn').onclick = closeModal;
-  document.getElementById('custom-modal-form').onsubmit = (e) => {
+  document.getElementById('custom-modal-form').onsubmit = async (e) => {
     e.preventDefault();
-    if (onConfirm) onConfirm();
+    if (onConfirm) await onConfirm();
   };
 }
 
 function shell(mainHtml, active) {
+  const user = getActiveUser();
+  if (!user) return '';
+
   const navItems = [
     ['dashboard', 'home', 'Dashboard'],
     ['approvals', 'user', 'Account approvals'],
@@ -165,14 +105,16 @@ function shell(mainHtml, active) {
   return `
     <div class="shell">
       <div class="sidebar">
-        <p class="brgy-name">Barangay San Isidro</p>
-        <p class="brgy-sub">Official portal</p>
+        <p class="brgy-name">${user.barangayName}</p>
+        <p class="brgy-sub">Official Portal</p>
         <div class="sb-nav">${nav}</div>
         <div class="sb-foot">
           <div class="sb-avatar">${ic('user')}</div>
           <div style="flex:1; min-width:0;">
-            <p class="who" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="active-user-name">Admin Staff</p>
-            <p class="role">Barangay staff</p>
+            <p class="who" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${user.fullName || user.email}">
+              ${user.fullName || user.email}
+            </p>
+            <p class="role">${user.position || user.role || 'Official'}</p>
           </div>
           <button class="sb-logout-btn" id="sb-logout" title="Sign out">
             ${ic('logout')}
@@ -187,6 +129,11 @@ function shell(mainHtml, active) {
 async function showScreen(screen, param) {
   closeModal();
 
+  const user = getActiveUser();
+  if (!user && screen !== 'login') {
+    return renderLogin();
+  }
+
   switch (screen) {
     case 'login': renderLogin(); break;
     case 'dashboard': await renderDashboard(); break;
@@ -199,7 +146,6 @@ async function showScreen(screen, param) {
   }
 }
 
-// Universal click delegation for modals, nav, and logout
 document.addEventListener('click', (e) => {
   if (e.target.closest('.modal-close') || e.target.classList.contains('modal-overlay')) {
     closeModal();
@@ -215,13 +161,17 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#sb-logout')) {
     openCustomModal({
       title: 'Sign out',
-      contentHtml: '<p style="font-size:13px; color:var(--muted); margin:0;">Are you sure you want to end your official session?</p>',
+      contentHtml: '<p style="font-size:13px; color:var(--muted); margin:0;">Are you sure you want to end your session?</p>',
       confirmText: 'Sign out',
       confirmClass: 'btn-small ghost',
       onConfirm: async () => {
         closeModal();
-        userExplicitlyLoggedIn = false;
-        await signOut(auth);
+        try {
+          await DataService.logout();
+        } catch (err) {
+          console.warn('Logout error:', err);
+        }
+        setActiveUser(null);
         showScreen('login');
       }
     });
@@ -229,71 +179,121 @@ document.addEventListener('click', (e) => {
   }
 });
 
-/* =========================================================================
-   Screen Implementations
-   ========================================================================= */
-
-// Screen 1: Sign in
 function renderLogin() {
   stage.innerHTML = `
     <div class="login-wrap">
       <form class="login-card" id="login-form">
         <div class="login-mark">${ic('building')}</div>
         <h2>Barangay official sign in</h2>
-        <p class="sub">Sign in with the account your barangay's system administrator created for you.</p>
+        <p class="sub">Sign in using your authorized community personnel account.</p>
+        
+        <div id="login-error" style="display:none; color:var(--brick); font-size:12px; margin-bottom:12px;"></div>
+
         <label class="field-label">Email</label>
-        <input class="field" type="email" id="login-email-input" required placeholder="admin@barangay.gov.ph" value="admin@test.com">
+        <input class="field" type="email" id="login-email" required placeholder="name@barangay.gov.ph" autocomplete="email">
+        
         <label class="field-label">Password</label>
-        <input class="field" type="password" id="login-pass-input" required placeholder="••••••••">
+        <input class="field" type="password" id="login-password" required placeholder="Enter password" autocomplete="current-password">
+        
         <button class="btn-primary" type="submit" id="login-btn">Sign in</button>
-        <p id="login-err-msg" style="color:var(--brick); font-size:12px; margin-top:10px; text-align:center;"></p>
-        <p class="helper">Authorized personnel only.</p>
+        <p class="helper">Authorized municipal and barangay personnel only.</p>
       </form>
     </div>
   `;
 
-  document.getElementById('login-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('login-email-input').value;
-    const pass = document.getElementById('login-pass-input').value;
-    const btn = document.getElementById('login-btn');
-    const err = document.getElementById('login-err-msg');
+  const form = document.getElementById('login-form');
+  const errorBox = document.getElementById('login-error');
+  const submitBtn = document.getElementById('login-btn');
 
-    btn.disabled = true;
-    btn.innerText = 'Signing in...';
-    err.innerText = '';
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Authenticating...';
+
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
 
     try {
-      userExplicitlyLoggedIn = true;
-      await signInWithEmailAndPassword(auth, email, pass);
+      const authResult = await DataService.login(email, password);
+      if (!authResult || !authResult.user) {
+        throw new Error('Authentication failed. Verify your email and password.');
+      }
+
+
+      const profile = await DataService.getUserProfile(authResult.user.id);
+
+      setActiveUser({
+        id: authResult.user.id,
+        email: authResult.user.email,
+        fullName: profile?.full_name || authResult.user.user_metadata?.full_name || email,
+        role: profile?.role || 'Barangay Official',
+        position: profile?.position || 'Official',
+        barangayId: profile?.barangay_id || 1,
+        barangayName: profile?.barangays?.name || 'Community Portal'
+      });
+
       showScreen('dashboard');
-    } catch (error) {
-      userExplicitlyLoggedIn = false;
-      err.innerText = error.message;
-      btn.disabled = false;
-      btn.innerText = 'Sign in';
+    } catch (err) {
+      errorBox.textContent = err.message || 'Unable to authenticate credentials.';
+      errorBox.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
     }
   };
 }
 
-// Screen 2: Dashboard
 async function renderDashboard() {
-  const reports = await DataService.getReports();
-  const docs = await DataService.getDocuments();
-  const annData = await DataService.getAnnouncements();
+  const user = getActiveUser();
+  const dateInfo = getCurrentDate();
+
+  let reports = [];
+  let docs = [];
+  let announcements = [];
+
+  try {
+    reports = await DataService.getReports(user.barangayId) || [];
+    docs = await DataService.getDocuments(user.barangayId) || [];
+    announcements = await DataService.getAnnouncements(user.barangayId) || [];
+  } catch (err) {
+    console.error('Error fetching dashboard statistics:', err);
+  }
 
   const newReports = reports.filter(q => q.status === 'pending').length;
   const pendingDocs = docs.filter(d => d.status === 'pending').length;
   const resolved = reports.filter(q => q.status === 'resolved').length + docs.filter(d => d.status === 'resolved').length;
-  const activeAnn = (annData.active || []).length;
+  const activeAnn = announcements.filter(a => !a.isArchived).length;
 
-  const dateInfo = getCurrentDate();
+  const trendPoints = [
+    { day: 'Mon', val: 2 },
+    { day: 'Tue', val: 4 },
+    { day: 'Wed', val: 3 },
+    { day: 'Thu', val: 6 },
+    { day: 'Fri', val: Math.max(2, reports.length) },
+    { day: 'Sat', val: 3 },
+    { day: 'Sun', val: 5 }
+  ];
+
+  const maxVal = 8;
+  const chartHeight = 110;
+  const chartWidth = 400;
+  const startX = 30;
+  const stepX = (chartWidth - startX) / (trendPoints.length - 1);
+
+  const coords = trendPoints.map((p, i) => {
+    const x = startX + (i * stepX);
+    const y = chartHeight - (p.val / maxVal * (chartHeight - 20)) + 10;
+    return { x, y, ...p };
+  });
+
+  const linePath = coords.map((c, i) => (i === 0 ? `M ${c.x} ${c.y}` : `L ${c.x} ${c.y}`)).join(' ');
+  const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${chartHeight + 15} L ${coords[0].x} ${chartHeight + 15} Z`;
 
   const main = `
     <div class="main-head">
       <div>
         <h3>Dashboard</h3>
-        <p>${dateInfo.weekday}, ${dateInfo.month} ${dateInfo.day}, ${dateInfo.year} · Barangay San Isidro</p>
+        <p>${dateInfo.weekday}, ${dateInfo.month} ${dateInfo.day}, ${dateInfo.year} · ${user.barangayName || 'Barangay Santo Niño'}</p>
       </div>
     </div>
 
@@ -301,82 +301,157 @@ async function renderDashboard() {
       <div class="stat-card">
         <div class="top"><div class="ic" style="background:var(--brick-100);color:var(--brick);">${ic('queue')}</div></div>
         <p class="num">${newReports}</p>
-        <p class="lbl">New reports today</p>
+        <p class="lbl">Pending Reports</p>
       </div>
       <div class="stat-card">
         <div class="top"><div class="ic" style="background:var(--gold-100);color:var(--gold-600);">${ic('doc')}</div></div>
         <p class="num">${pendingDocs}</p>
-        <p class="lbl">Pending document requests</p>
+        <p class="lbl">Pending Document Requests</p>
       </div>
       <div class="stat-card">
         <div class="top"><div class="ic" style="background:var(--sage-100);color:#3E6552;">${ic('doc')}</div></div>
         <p class="num">${resolved}</p>
-        <p class="lbl">Resolved this week</p>
+        <p class="lbl">Resolved Items</p>
       </div>
       <div class="stat-card">
         <div class="top"><div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('megaphone')}</div></div>
         <p class="num">${activeAnn}</p>
-        <p class="lbl">Active announcements</p>
+        <p class="lbl">Active Announcements</p>
       </div>
     </div>
 
     <div class="chart-row">
-      <div class="panel">
-        <h4>Reports by category, last 30 days</h4>
-        <div class="bars">
-          <div class="b" style="height:45%;background:var(--brick);"><span>Disturbance</span></div>
-          <div class="b" style="height:90%;background:var(--gold);"><span>Drainage</span></div>
-          <div class="b" style="height:60%;background:var(--teal-700);"><span>Sanitation</span></div>
-          <div class="b" style="height:30%;background:var(--sage);"><span>Delinquency</span></div>
-          <div class="b" style="height:75%;background:var(--teal-900);"><span>Other</span></div>
+      <div class="panel" style="display:flex; flex-direction:column;">
+        <h4>Incidents &amp; Complaints Trend</h4>
+        <div style="flex:1; width:100%; margin-top:8px;">
+          <svg viewBox="0 0 420 155" style="width:100%; height:auto; overflow:visible;">
+            <defs>
+              <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#0f766e" stop-opacity="0.28" />
+                <stop offset="100%" stop-color="#0f766e" stop-opacity="0.0" />
+              </linearGradient>
+            </defs>
+
+            <!-- Background subtle gridlines -->
+            <line x1="25" y1="30" x2="410" y2="30" stroke="#f1f5f9" stroke-width="1.5" />
+            <line x1="25" y1="75" x2="410" y2="75" stroke="#f1f5f9" stroke-width="1.5" />
+            <line x1="25" y1="120" x2="410" y2="120" stroke="#f1f5f9" stroke-width="1.5" />
+
+            <!-- Y Axis values -->
+            <text x="12" y="34" font-size="10" fill="#94a3b8">6</text>
+            <text x="12" y="79" font-size="10" fill="#94a3b8">3</text>
+            <text x="12" y="124" font-size="10" fill="#94a3b8">0</text>
+
+            <!-- Fill Area under the line -->
+            <path d="${areaPath}" fill="url(#lineGrad)" />
+
+            <!-- The Line -->
+            <path d="${linePath}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+
+            <!-- Points and Day Labels -->
+            ${coords.map(c => `
+              <circle cx="${c.x}" cy="${c.y}" r="4.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
+              <text x="${c.x}" y="142" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">${c.day}</text>
+            `).join('')}
+          </svg>
         </div>
       </div>
+
       <div class="panel">
-        <h4>Status breakdown</h4>
+        <h4>Current Operational Breakdown</h4>
         <div class="donut-row">
           <svg width="88" height="88" viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="15.5" fill="none" stroke="#E7E9E1" stroke-width="4"/>
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#5C8A72" stroke-width="4" stroke-dasharray="58 97" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#E0A62E" stroke-width="4" stroke-dasharray="24 97" stroke-dashoffset="-58" transform="rotate(-90 18 18)"/>
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#C1483A" stroke-width="4" stroke-dasharray="15 97" stroke-dashoffset="-82" transform="rotate(-90 18 18)"/>
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#C1483A" stroke-width="4" stroke-dasharray="${Math.max(5, newReports * 12)} 97" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
           </svg>
           <div class="legend">
-            <div class="li"><span class="sw" style="background:#5C8A72;"></span>Resolved · 60%</div>
-            <div class="li"><span class="sw" style="background:#E0A62E;"></span>In progress · 25%</div>
-            <div class="li"><span class="sw" style="background:#C1483A;"></span>Pending · 15%</div>
+            <div class="li"><span class="sw" style="background:#C1483A;"></span>Pending Review (${newReports})</div>
+            <div class="li"><span class="sw" style="background:#5C8A72;"></span>Resolved (${resolved})</div>
           </div>
         </div>
       </div>
     </div>
-
-    <div class="panel">
-      <h4>Reports over time</h4>
-      <svg viewBox="0 0 500 60" style="width:100%; height:80px; stroke:var(--teal-900); fill:none; stroke-width:3;">
-        <path d="M 0 50 Q 80 40, 150 48 T 300 35 T 420 20 T 500 30" />
-      </svg>
-    </div>
   `;
   stage.innerHTML = shell(main, 'dashboard');
-  syncUserLabel();
 }
 
-// Screen 3: Account Approvals
+function renderDashboardLineChart(reports = []) {
+  const canvas = document.getElementById('dashboardLineChart');
+  if (!canvas || typeof Chart === 'line') return;
+
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 160);
+  gradient.addColorStop(0, 'rgba(15, 118, 110, 0.25)');
+  gradient.addColorStop(1, 'rgba(15, 118, 110, 0.0)');
+
+  if (window.activeDashChart) {
+    window.activeDashChart.destroy();
+  }
+
+  window.activeDashChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{
+        label: 'Reports Filed',
+        data: [2, 4, 3, 6, Math.max(1, reports.length), 3, 5],
+        borderColor: '#0f766e',
+        borderWidth: 2.5,
+        backgroundColor: gradient,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#0f766e'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#94a3b8', font: { size: 11 } }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: '#f1f5f9' },
+          ticks: { stepSize: 2, color: '#94a3b8', font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
 async function renderApprovals() {
-  const approvals = await DataService.getApprovals();
+  const user = getActiveUser();
+  let approvals = [];
+
+  try {
+    approvals = await DataService.getApprovals(user.barangayId) || [];
+  } catch (err) {
+    console.error('Error fetching approvals:', err);
+  }
 
   const trs = approvals.map(r => `
     <tr class="row-link" data-approval-id="${r.id}">
       <td>
         <div class="name-cell">
           <div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('user')}</div>
-          <div><div class="t">${r.name}</div><div class="s">${r.address}</div></div>
+          <div>
+            <div class="t">${r.name || r.full_name || 'Resident'}</div>
+            <div class="s">${r.address || 'Address pending'}</div>
+          </div>
         </div>
       </td>
       <td>
-        <span style="font-size:9px;font-weight:700;background:var(--teal-100);color:var(--teal-800);padding:2px 7px;border-radius:999px;">AI-scanned</span>
-        <div style="margin-top:3px;">${r.idType} · ${r.idNumber}</div>
+        <div style="font-weight:600; color:var(--charcoal);">${r.idType || r.id_type || 'Valid ID'}</div>
+        <div class="s">${(r.idNumber || r.id_number) ? `ID No: ${r.idNumber || r.id_number}` : 'Number pending verification'}</div>
       </td>
-      <td>${r.date}</td>
+      <td>${r.date || (r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent')}</td>
       <td style="text-align:right;color:var(--muted);">${ic('chevron')}</td>
     </tr>
   `).join('');
@@ -385,72 +460,179 @@ async function renderApprovals() {
     <div class="main-head">
       <div>
         <h3>Account approvals</h3>
-        <p>New resident registrations. Tap a row to review the AI-scanned ID and approve or reject.</p>
+        <p>Pending resident registrations. Verify the uploaded valid ID image and resident address before authorizing access.</p>
       </div>
     </div>
-    <div class="table-responsive">
-      <table class="table">
-        <thead><tr><th>Resident</th><th>ID submitted</th><th>Registered</th><th></th></tr></thead>
-        <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No pending resident accounts.</td></tr>'}</tbody>
-      </table>
-    </div>
+    <table class="table">
+      <thead><tr><th>Resident</th><th>ID submitted</th><th>Registered</th><th></th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No pending resident registrations found.</td></tr>'}</tbody>
+    </table>
   `;
   stage.innerHTML = shell(main, 'approvals');
-  syncUserLabel();
 
   document.querySelectorAll('[data-approval-id]').forEach(row => {
-    row.onclick = () => openApprovalModal(Number(row.dataset.approvalId));
+    row.onclick = () => {
+      const selected = approvals.find(item => item.id == row.dataset.approvalId);
+      if (selected) openApprovalModal(selected);
+    };
   });
 }
 
-function openApprovalModal(id) {
-  const r = DB.approvals.find(item => item.id === id);
-  if (!r) return;
-
+function openApprovalModal(record) {
   modalRoot.innerHTML = `
     <div class="modal-overlay">
-      <div class="modal-box">
+      <div class="modal-box" style="width: 480px;">
         <div class="modal-head">
           <div>
-            <h4>${r.name}</h4>
-            <span style="font-size:9px;font-weight:700;background:var(--teal-100);color:var(--teal-800);padding:2px 7px;border-radius:999px;">AI-scanned</span>
+            <h4>${record.name || record.full_name}</h4>
+            <span style="font-size:11px;color:var(--muted);">Resident ID Verification</span>
           </div>
           <button class="modal-close" id="approval-modal-close">✕</button>
         </div>
-        <div class="modal-field"><span class="modal-label">Address</span><span class="modal-value">${r.address}</span></div>
-        <div class="modal-field"><span class="modal-label">ID type</span><span class="modal-value">${r.idType}</span></div>
-        <div class="modal-field"><span class="modal-label">ID number</span><span class="modal-value">${r.idNumber}</span></div>
-        <div class="modal-field"><span class="modal-label">Registered</span><span class="modal-value">${r.date}</span></div>
-        <div class="evidence-thumb" style="margin-top:12px;">[ AI-Verified Government ID Scan Attached ]</div>
-        <div class="modal-actions">
-          <button class="btn-small" id="btn-approve">Approve account</button>
+        
+        <div class="modal-field"><span class="modal-label">Address</span><span class="modal-value">${record.address || 'Not specified'}</span></div>
+        <div class="modal-field"><span class="modal-label">ID type</span><span class="modal-value">${record.idType || record.id_type || 'Valid Government ID'}</span></div>
+        <div class="modal-field"><span class="modal-label">ID number</span><span class="modal-value">${record.idNumber || record.id_number || 'N/A'}</span></div>
+        
+        <div style="margin-top:14px;">
+          <label class="modal-label" style="display:block; margin-bottom:6px;">Uploaded ID Photo</label>
+          ${(record.idPhotoUrl || record.id_photo_url)
+            ? `<div style="border:1px solid var(--sand); border-radius:6px; overflow:hidden; background:#000; text-align:center;">
+                 <img src="${record.idPhotoUrl || record.id_photo_url}" alt="Resident ID" style="max-width:100%; max-height:240px; display:inline-block; object-fit:contain;">
+               </div>`
+            : `<div class="evidence-thumb">No ID photo uploaded</div>`
+          }
+        </div>
+
+        <div class="modal-actions" style="margin-top:18px;">
+          <button class="btn-small" id="btn-approve">Approve resident</button>
           <button class="btn-small ghost" style="color:var(--brick);border-color:var(--brick);" id="btn-reject">Reject</button>
         </div>
-        <p class="modal-warning">Confirm that ID details match resident records before activation.</p>
       </div>
     </div>
   `;
 
   document.getElementById('approval-modal-close').onclick = closeModal;
 
-  document.getElementById('btn-approve').onclick = () => {
-    DB.approvals = DB.approvals.filter(a => a.id !== id);
-    saveDB();
+  document.getElementById('btn-approve').onclick = async () => {
+    await DataService.updateApprovalStatus(record.id, 'APPROVED');
     closeModal();
     renderApprovals();
   };
 
-  document.getElementById('btn-reject').onclick = () => {
-    DB.approvals = DB.approvals.filter(a => a.id !== id);
-    saveDB();
+  document.getElementById('btn-reject').onclick = async () => {
+    await DataService.updateApprovalStatus(record.id, 'REJECTED');
     closeModal();
     renderApprovals();
   };
 }
 
-// Screen 4: Report Queue
+async function renderDocuments() {
+  const user = getActiveUser();
+  let docs = [];
+
+  try {
+    docs = await DataService.getDocuments(user.barangayId) || [];
+  } catch (err) {
+    console.error('Error fetching documents:', err);
+  }
+
+  const trs = docs.map(d => {
+    const rawStatus = (d.status || 'pending').toLowerCase();
+    const pickupVal = d.pickup || d.pickup_date || '';
+
+    return `
+      <tr data-doc-row="${d.id}">
+        <td>
+          <div class="name-cell">
+            <div class="ic" style="background:var(--gold-100);color:var(--gold-600);">${ic('doc')}</div>
+            <div>
+              <div class="t">${d.name || d.resident_name}</div>
+              <div class="s">Requested: ${d.type || d.document_type}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <select class="field doc-status-select" data-doc-id="${d.id}" style="width: auto; padding: 4px 8px; font-size: 12px; height: 32px;">
+            <option value="pending" ${rawStatus === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="in_progress" ${rawStatus === 'in_progress' ? 'selected' : ''}>In Progress</option>
+            <option value="resolved" ${rawStatus === 'resolved' ? 'selected' : ''}>Resolved</option>
+          </select>
+        </td>
+        <td>
+          <input type="date" class="field doc-date-picker" data-doc-id="${d.id}" value="${pickupVal}" style="width: 145px; padding: 4px 8px; font-size: 12px; height: 32px;">
+        </td>
+        <td>
+          <span class="save-indicator text-xs" id="indicator-${d.id}" style="color: var(--teal-800); font-size: 11px;">Saved</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const main = `
+    <div class="main-head">
+      <div>
+        <h3>Documents &amp; IDs</h3>
+        <p>Manage resident barangay clearances, certifications, and permit endorsements.</p>
+      </div>
+    </div>
+    <table class="table">
+      <thead><tr><th>Resident &amp; Document</th><th>Status</th><th>Pickup Date</th><th></th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No document requests found.</td></tr>'}</tbody>
+    </table>
+  `;
+  stage.innerHTML = shell(main, 'documents');
+
+  document.querySelectorAll('.doc-status-select').forEach(select => {
+    select.onchange = async () => {
+      const id = select.dataset.docId;
+      const dateInput = document.querySelector(`.doc-date-picker[data-doc-id="${id}"]`);
+      const indicator = document.getElementById(`indicator-${id}`);
+      
+      indicator.textContent = 'Saving...';
+      try {
+        await DataService.updateDocument(id, {
+          status: select.value,
+          pickup_date: dateInput.value || null
+        });
+        indicator.textContent = 'Saved';
+      } catch (err) {
+        indicator.textContent = 'Error saving';
+        console.error(err);
+      }
+    };
+  });
+
+  document.querySelectorAll('.doc-date-picker').forEach(input => {
+    input.onchange = async () => {
+      const id = input.dataset.docId;
+      const select = document.querySelector(`.doc-status-select[data-doc-id="${id}"]`);
+      const indicator = document.getElementById(`indicator-${id}`);
+
+      indicator.textContent = 'Saving...';
+      try {
+        await DataService.updateDocument(id, {
+          status: select.value,
+          pickup_date: input.value || null
+        });
+        indicator.textContent = 'Saved';
+      } catch (err) {
+        indicator.textContent = 'Error saving';
+        console.error(err);
+      }
+    };
+  });
+}
+
 async function renderQueue() {
-  const reports = await DataService.getReports();
+  const user = getActiveUser();
+  let reports = [];
+
+  try {
+    reports = await DataService.getReports(user.barangayId) || [];
+  } catch (err) {
+    console.error('Error fetching reports from Supabase:', err);
+  }
 
   const cat = document.getElementById('queue-cat-filter')?.value || '';
   const stat = document.getElementById('queue-stat-filter')?.value || '';
@@ -458,10 +640,10 @@ async function renderQueue() {
 
   const list = reports.filter(q => {
     const matchesCat = !cat || q.category === cat;
-    const matchesStat = !stat || q.status === stat;
+    const matchesStat = !stat || (q.status || '').toLowerCase() === stat;
     const matchesSearch = !search ||
       (q.title && q.title.toLowerCase().includes(search)) ||
-      (q.meta && q.meta.toLowerCase().includes(search));
+      (q.description && q.description.toLowerCase().includes(search));
     return matchesCat && matchesStat && matchesSearch;
   });
 
@@ -469,15 +651,15 @@ async function renderQueue() {
     <tr>
       <td>
         <div class="name-cell">
-          <div class="ic" style="background:var(--${r.bg});color:${r.fg.startsWith('#') ? r.fg : 'var(--' + r.fg + ')'};">${ic('queue')}</div>
+          <div class="ic" style="background:var(--${r.priority === 'high' ? 'brick-100' : 'sage-100'});color:var(--${r.priority === 'high' ? 'brick' : 'teal-800'});">${ic('queue')}</div>
           <div>
             <div class="t">${r.title}</div>
-            <div class="s">${r.meta}</div>
+            <div class="s">${r.category} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'Recent'} ${r.aiSeverityScore ? `· AI Severity: ${r.aiSeverityScore}/100` : ''}</div>
           </div>
         </div>
       </td>
-      <td><span class="pill ${r.priority}">${r.priority} priority</span></td>
-      <td><span class="pill ${r.status}">${r.status === 'pending' ? 'Pending' : r.status === 'progress' ? 'In progress' : 'Resolved'}</span></td>
+      <td><span class="pill ${(r.priority || 'medium').toLowerCase()}">${(r.priority || 'MEDIUM').toUpperCase()} priority</span></td>
+      <td><span class="pill ${(r.status || 'pending').toLowerCase()}">${r.status || 'Pending'}</span></td>
       <td>
         <div class="table-actions">
           <button class="link-btn" data-view-report="${r.id}">View</button>
@@ -490,7 +672,7 @@ async function renderQueue() {
     <div class="main-head">
       <div>
         <h3>Report &amp; request queue</h3>
-        <p>Sorted by AI-assessed priority and severity.</p>
+        <p>Live municipal concerns submitted by residents.</p>
       </div>
     </div>
     <div class="filters">
@@ -499,64 +681,83 @@ async function renderQueue() {
         <option value="Disturbance" ${cat === 'Disturbance' ? 'selected' : ''}>Disturbance</option>
         <option value="Drainage" ${cat === 'Drainage' ? 'selected' : ''}>Drainage</option>
         <option value="Sanitation" ${cat === 'Sanitation' ? 'selected' : ''}>Sanitation</option>
-        <option value="Other" ${cat === 'Other' ? 'selected' : ''}>Other</option>
+        <option value="Disaster" ${cat === 'Disaster' ? 'selected' : ''}>Disaster</option>
       </select>
       <select id="queue-stat-filter">
         <option value="">All statuses</option>
         <option value="pending" ${stat === 'pending' ? 'selected' : ''}>Pending</option>
-        <option value="progress" ${stat === 'progress' ? 'selected' : ''}>In progress</option>
+        <option value="in_progress" ${stat === 'in_progress' ? 'selected' : ''}>In progress</option>
         <option value="resolved" ${stat === 'resolved' ? 'selected' : ''}>Resolved</option>
       </select>
       <input id="queue-search" placeholder="Search reports..." value="${search}">
     </div>
-    <div class="table-responsive">
-      <table class="table">
-        <thead><tr><th>Report</th><th>Priority</th><th>Status</th><th></th></tr></thead>
-        <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No reports match your filters.</td></tr>'}</tbody>
-      </table>
-    </div>
+    <table class="table">
+      <thead><tr><th>Report</th><th>Priority</th><th>Status</th><th></th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No records match the current filters.</td></tr>'}</tbody>
+    </table>
   `;
   stage.innerHTML = shell(main, 'queue');
-  syncUserLabel();
 
   document.getElementById('queue-cat-filter').onchange = renderQueue;
   document.getElementById('queue-stat-filter').onchange = renderQueue;
   document.getElementById('queue-search').oninput = renderQueue;
   document.querySelectorAll('[data-view-report]').forEach(btn => {
-    btn.onclick = () => showScreen('detail', Number(btn.dataset.viewReport));
+    btn.onclick = () => showScreen('detail', btn.dataset.viewReport);
   });
 }
 
-// Screen 5: Detail Screen
 async function renderDetail(id) {
-  const reports = await DataService.getReports();
-  const r = reports.find(q => q.id === id);
-  if (!r) return showScreen('queue');
+  let report = null;
+  try {
+    report = await DataService.getReportById(id);
+  } catch (err) {
+    console.error('Error fetching report details:', err);
+  }
+
+  if (!report) return showScreen('queue');
+
+  const aiStatusBadge = report.ai_valid === false || report.aiValid === false
+    ? `<span class="pill" style="background:var(--brick-100);color:var(--brick);font-weight:700;">AI FLAGGED: TROLL / SPAM</span>`
+    : `<span class="pill" style="background:var(--teal-100);color:var(--teal-900);font-weight:700;">AI VERIFIED GENUINE</span>`;
+
+  const aiCard = `
+    <div class="panel" style="margin-top: 14px; border-left: 4px solid ${report.aiValid === false ? 'var(--brick)' : 'var(--teal-700)'};">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h4 style="margin:0;">Automated AI Triage</h4>
+        ${aiStatusBadge}
+      </div>
+      <p style="font-size: 12px; margin: 4px 0;"><b>Calculated Severity:</b> ${report.ai_severity_score ?? report.aiSeverityScore ?? 0}/100</p>
+      <p style="font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.4;">
+        <b>Assessment:</b> ${report.ai_triage_reason || report.aiTriageReason || 'AI analysis completed without flags.'}
+      </p>
+    </div>
+  `;
 
   const main = `
     <div class="main-head">
       <div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <h3>${r.title}</h3>
-          <span class="pill ${r.priority}">${r.priority} priority</span>
+          <h3>${report.title}</h3>
+          <span class="pill ${(report.priority || 'medium').toLowerCase()}">${(report.priority || 'MEDIUM').toUpperCase()}</span>
         </div>
-        <p>${r.meta}</p>
+        <p>${report.category} · Status: ${report.status}</p>
       </div>
       <button class="btn-small ghost" id="btn-back-queue">Back to queue</button>
     </div>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;">
       <div>
         <div class="panel">
-          <h4>Description</h4>
-          <p style="font-size:12.5px;line-height:1.6;margin:0;">${r.desc}</p>
-          <div class="evidence-thumb" style="margin-top:14px;">Attached Photo Evidence</div>
+          <h4>Incident Details</h4>
+          <p style="font-size:12.5px;line-height:1.6;margin:0;">${report.description || 'No description provided.'}</p>
+          ${report.photo_url || report.photoUrl ? `<div style="margin-top:14px;"><img src="${report.photo_url || report.photoUrl}" alt="Evidence" style="max-width:100%; border-radius:6px;"></div>` : '<div class="evidence-thumb" style="margin-top:14px;">No photo attached</div>'}
         </div>
+        ${aiCard}
       </div>
       <div>
         <div class="panel">
-          <h4>Status &amp; Triage</h4>
-          <label class="field-label">Internal staff notes</label>
-          <textarea class="field" id="report-notes" style="height:76px;resize:none;">${r.notes || ''}</textarea>
+          <h4>Triage &amp; Management</h4>
+          <label class="field-label">Internal notes</label>
+          <textarea class="field" id="report-notes" style="height:76px;resize:none;">${report.internal_notes || report.internalNotes || ''}</textarea>
           <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
             <button class="btn-small" id="btn-mark-progress">Mark in progress</button>
             <button class="btn-small ghost" style="color:var(--sage);" id="btn-mark-resolved">Resolve</button>
@@ -566,292 +767,284 @@ async function renderDetail(id) {
     </div>
   `;
   stage.innerHTML = shell(main, 'queue');
-  syncUserLabel();
 
   document.getElementById('btn-back-queue').onclick = () => showScreen('queue');
-  document.getElementById('btn-mark-progress').onclick = () => updateReportTriage(id, 'progress');
-  document.getElementById('btn-mark-resolved').onclick = () => updateReportTriage(id, 'resolved');
+  document.getElementById('btn-mark-progress').onclick = async () => {
+    const notes = document.getElementById('report-notes').value;
+    await DataService.updateReport(id, { status: 'in_progress', internal_notes: notes });
+    showScreen('queue');
+  };
+  document.getElementById('btn-mark-resolved').onclick = async () => {
+    const notes = document.getElementById('report-notes').value;
+    await DataService.updateReport(id, { status: 'resolved', internal_notes: notes });
+    showScreen('queue');
+  };
 }
 
-async function updateReportTriage(id, newStatus) {
-  const notes = document.getElementById('report-notes').value;
-  await DataService.updateReportTriage(id, { status: newStatus, notes });
-  showScreen('queue');
-}
+async function renderAnnouncements() {
+  const user = getActiveUser();
+  let announcements = [];
 
-// Screen 6: Documents & IDs
-async function renderDocuments() {
-  const documents = await DataService.getDocuments();
+  try {
+    announcements = await DataService.getAnnouncements(user.barangayId) || [];
+  } catch (err) {
+    console.error('Error fetching announcements:', err);
+  }
 
-  const trs = documents.map(r => `
-    <tr>
-      <td>
-        <div class="name-cell">
-          <div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('doc')}</div>
-          <div>
-            <div class="t">${r.type}</div>
-            <div class="s">${r.name} · requested ${r.date} ${r.pickup ? '· Pickup: ' + r.pickup : ''}</div>
-          </div>
-        </div>
-      </td>
-      <td><span class="pill ${r.status}">${r.status === 'pending' ? 'Pending' : r.status === 'progress' ? 'Preparing' : 'Ready for pickup'}</span></td>
-      <td>
-        <div class="table-actions">
-          <button class="link-btn" data-msg-doc="${r.id}">Message</button>
-          <button class="link-btn" data-pickup-doc="${r.id}">Set pickup date</button>
-          ${r.status !== 'resolved' ? `<button class="link-btn" data-ready-doc="${r.id}">Mark ready</button>` : ''}
-        </div>
-      </td>
-    </tr>
+  const activeList = announcements.filter(a => !a.isArchived);
+  const pastList = announcements.filter(a => a.isArchived);
+
+
+  const viewYear = calendarViewDate.getFullYear();
+  const viewMonth = calendarViewDate.getMonth();
+  const viewMonthName = calendarViewDate.toLocaleString('en-US', { month: 'long' });
+
+  const realToday = new Date();
+  const isCurrentMonthView = realToday.getFullYear() === viewYear && realToday.getMonth() === viewMonth;
+
+
+  const eventDays = new Set();
+  announcements.forEach(a => {
+    if (a.event_date) {
+      const [year, month, day] = a.event_date.split('-').map(Number);
+      if (year === viewYear && month === (viewMonth + 1)) {
+        eventDays.add(day);
+      }
+    }
+  });
+
+  const activeItems = activeList.map(a => `
+    <div class="ann-item" style="margin-bottom:12px;">
+      <div class="top"><span class="tag" style="color:var(--teal-800);background:var(--teal-100);">${a.category || a.tag || 'General'}</span></div>
+      <p class="title" style="margin:6px 0 2px 0;">${a.title}</p>
+      ${a.description ? `<p style="font-size:12px; color:var(--muted); margin:0 0 6px 0;">${a.description}</p>` : ''}
+      <p class="meta">
+        ${a.event_date ? `Event: ${a.event_date} · ` : ''}Posted ${a.posted || 'Recent'} · 
+        <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-edit-ann="${a.id}">Edit</a>
+        <a href="#" style="color:var(--brick);text-decoration:none;font-weight:600;" data-archive-ann="${a.id}">Archive</a>
+      </p>
+    </div>
   `).join('');
 
-  const main = `
-    <div class="main-head">
-      <div>
-        <h3>Document &amp; ID requests</h3>
-        <p>Coordinate certifications and pick-up appointments.</p>
-      </div>
+  const pastItems = pastList.map(a => `
+    <div class="ann-item" style="margin-bottom:10px; opacity:0.85; background:#fbfbfa;">
+      <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${a.category || a.tag || 'Archived'}</span></div>
+      <p class="title" style="margin:4px 0 2px 0; font-size:13.5px;">${a.title}</p>
+      ${a.description ? `<p style="font-size:11.5px; color:var(--muted); margin:0 0 4px 0;">${a.description}</p>` : ''}
+      <p class="meta">
+        ${a.event_date ? `Event: ${a.event_date} · ` : ''}${a.posted || 'Past'} · 
+        <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-repost-ann="${a.id}">Repost</a>
+        <a href="#" style="color:var(--charcoal);text-decoration:none;font-weight:600;" data-edit-ann="${a.id}">Edit</a>
+      </p>
     </div>
-    <div class="table-responsive">
-      <table class="table">
-        <thead><tr><th>Request</th><th>Status</th><th></th></tr></thead>
-        <tbody>${trs}</tbody>
-      </table>
-    </div>
-  `;
-  stage.innerHTML = shell(main, 'documents');
-  syncUserLabel();
+  `).join('');
 
-  document.querySelectorAll('[data-msg-doc]').forEach(b => {
-    b.onclick = () => {
-      const doc = documents.find(d => d.id === Number(b.dataset.msgDoc));
-      openCustomModal({
-        title: `Message ${doc.name}`,
-        contentHtml: `
-          <div class="modal-form-group">
-            <label>SMS / In-App Notification</label>
-            <textarea class="field" id="doc-msg-text" placeholder="Type notification update regarding ${doc.type}..." required></textarea>
-          </div>
-        `,
-        confirmText: 'Send Notification',
-        onConfirm: () => {
-          closeModal();
-          openCustomModal({
-            title: 'Message Dispatched',
-            contentHtml: `<p style="font-size:12.5px;color:var(--muted);margin:0;">Notice dispatched to <b>${doc.name}</b> successfully.</p>`,
-            confirmText: 'Done',
-            onConfirm: closeModal
-          });
-        }
-      });
-    };
-  });
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
 
-  document.querySelectorAll('[data-pickup-doc]').forEach(b => {
-    b.onclick = () => {
-      const doc = documents.find(d => d.id === Number(b.dataset.pickupDoc));
-      openCustomModal({
-        title: 'Schedule document pickup',
-        contentHtml: `
-          <div class="modal-form-group">
-            <label>Select pickup date for ${doc.name}</label>
-            <input class="field" type="date" id="doc-pickup-input" required value="2026-09-18">
-          </div>
-        `,
-        confirmText: 'Confirm date',
-        onConfirm: async () => {
-          const dateVal = document.getElementById('doc-pickup-input').value;
-          await DataService.updateDocStatus(doc.id, 'progress', dateVal, 'Pickup date set.');
-          closeModal();
-          renderDocuments();
-        }
-      });
-    };
-  });
+  const emptyLeadingDays = [...Array(firstDayOfWeek)].map(() => `<div></div>`).join('');
 
-  document.querySelectorAll('[data-ready-doc]').forEach(b => {
-    b.onclick = async () => {
-      const docId = Number(b.dataset.readyDoc);
-      await DataService.updateDocStatus(docId, 'resolved');
-      renderDocuments();
-    };
-  });
-}
-
-// Screen 7: Announcements & Calendar
-async function renderAnnouncements() {
-  const annData = await DataService.getAnnouncements();
-  const activeAnnouncements = annData.active || [];
-  const pastAnnouncements = annData.past || [];
-  const eventDays = activeAnnouncements.map(a => a.day).filter(Boolean);
-
-  const dateInfo = getCurrentDate();
-
-  const cal = [...Array(35)].map((_, i) => {
-    const day = i - 1;
-    if (day < 1 || day > 30) return `<div class="d muted">${((day + 30 - 1) % 30) + 1}</div>`;
-    const isToday = day === dateInfo.day;
-    const isEvent = eventDays.includes(day);
-    return `<div class="d ${isToday ? 'today' : ''} ${isEvent ? 'event' : ''}">${day}</div>`;
-  }).join('');
-
-  const activeItems = activeAnnouncements.map(a => {
-    const tagStyle = a.tag === 'Advisory'
-      ? 'color:var(--brick);background:var(--brick-100);'
-      : a.tag === 'Event'
-      ? 'color:var(--gold-600);background:var(--gold-100);'
-      : 'color:var(--teal-800);background:var(--teal-100);';
+  const dayCells = [...Array(daysInMonth)].map((_, i) => {
+    const dayNum = i + 1;
+    const isToday = isCurrentMonthView && (dayNum === realToday.getDate());
+    const hasEvent = eventDays.has(dayNum);
 
     return `
-      <div class="ann-item">
-        <div class="top"><span class="tag" style="${tagStyle}">${a.tag}</span></div>
-        <p class="title">${a.title}</p>
-        <p class="meta">Posted ${a.posted} · <a href="#" style="color:var(--brick);text-decoration:none;font-weight:600;" data-delete-ann="${a.id}">Delete</a></p>
+      <div class="d ${isToday ? 'today' : ''}" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 32px;">
+        <span>${dayNum}</span>
+        ${hasEvent ? `
+          <span style="
+            width: 5px;
+            height: 5px;
+            background-color: ${isToday ? '#ffffff' : 'var(--teal-800, #0f766e)'};
+            border-radius: 50%;
+            position: absolute;
+            bottom: 2px;
+          "></span>
+        ` : ''}
       </div>
     `;
   }).join('');
-
-  const pastRows = pastAnnouncements.map(p => `
-    <tr>
-      <td><strong>${p.title}</strong></td>
-      <td>${p.tag}</td>
-      <td>${p.posted}</td>
-      <td style="text-align:right;"><button class="link-btn" data-repost-ann="${p.id}">Repost</button></td>
-    </tr>
-  `).join('');
 
   const main = `
     <div class="main-head">
       <div>
         <h3>Announcements &amp; calendar</h3>
-        <p>What citizens see on their dashboard.</p>
+        <p>Bulletins published to mobile users.</p>
       </div>
       <button class="btn-small" id="btn-new-ann">+ New announcement</button>
     </div>
 
-    <div class="ann-layout">
-      <div>${activeItems || '<p style="color:var(--muted);font-size:12px;">No active announcements.</p>'}</div>
-      <div class="panel">
-        <h4>${dateInfo.month} ${dateInfo.year}</h4>
-        <div class="cal">
-          <div class="cal-head">S</div><div class="cal-head">M</div><div class="cal-head">T</div><div class="cal-head">W</div><div class="cal-head">T</div><div class="cal-head">F</div><div class="cal-head">S</div>
-          ${cal}
+    <div class="ann-layout" style="display:grid; grid-template-columns: 1.4fr 1fr; gap:20px; align-items:flex-start;">
+      <div>
+        <h4 style="font-size:13px; color:var(--muted); margin-bottom:10px;">Active Announcements</h4>
+        <div style="margin-bottom:24px;">
+          ${activeItems || '<p style="color:var(--muted);font-size:12px;">No active announcements published.</p>'}
+        </div>
+        
+        <h4 style="font-size:13px; color:var(--muted); margin-bottom:10px;">Past Announcements</h4>
+        <div style="max-height: 480px; overflow-y: auto; padding-right: 6px;">
+          ${pastItems || '<p style="color:var(--muted);font-size:12px;">No past archived announcements.</p>'}
         </div>
       </div>
-    </div>
-
-    <div class="panel" style="margin-top:20px;">
-      <h4>Past announcements</h4>
-      <div class="table-responsive" style="margin-bottom:0;">
-        <table class="table">
-          <thead>
-            <tr><th>Title</th><th>Category</th><th>Posted</th><th></th></tr>
-          </thead>
-          <tbody>
-            ${pastRows || '<tr><td colspan="4" style="color:var(--muted);padding:10px 0;">No past records.</td></tr>'}
-          </tbody>
-        </table>
+      
+      <div class="panel" style="height:fit-content; position:sticky; top:16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="margin: 0;">${viewMonthName} ${viewYear}</h4>
+          <div style="display: flex; gap: 4px;">
+            <button id="cal-prev" class="btn-small ghost" style="padding: 2px 8px; font-size: 11px;">◀</button>
+            <button id="cal-next" class="btn-small ghost" style="padding: 2px 8px; font-size: 11px;">▶</button>
+          </div>
+        </div>
+        <div class="cal">
+          <div class="cal-head">S</div><div class="cal-head">M</div><div class="cal-head">T</div>
+          <div class="cal-head">W</div><div class="cal-head">T</div><div class="cal-head">F</div><div class="cal-head">S</div>
+          ${emptyLeadingDays}
+          ${dayCells}
+        </div>
       </div>
     </div>
   `;
   stage.innerHTML = shell(main, 'announcements');
-  syncUserLabel();
 
-  document.getElementById('btn-new-ann').onclick = openAnnouncementModal;
 
-  document.querySelectorAll('[data-delete-ann]').forEach(a => {
-    a.onclick = (e) => {
+  document.getElementById('cal-prev').onclick = () => {
+    calendarViewDate = new Date(viewYear, viewMonth - 1, 1);
+    renderAnnouncements();
+  };
+
+  document.getElementById('cal-next').onclick = () => {
+    calendarViewDate = new Date(viewYear, viewMonth + 1, 1);
+    renderAnnouncements();
+  };
+
+  document.getElementById('btn-new-ann').onclick = () => {
+    openCustomModal({
+      title: 'Publish announcement',
+      contentHtml: `
+        <div class="modal-form-group">
+          <label>Title</label>
+          <input class="field" id="ann-title" placeholder="e.g. Free Rabies Vaccination" required>
+        </div>
+        <div class="modal-form-group">
+          <label>Description</label>
+          <textarea class="field" id="ann-desc" placeholder="Details and instructions..." style="height:60px;resize:none;" required></textarea>
+        </div>
+        <div class="modal-form-group">
+          <label>Event Date</label>
+          <input class="field" type="date" id="ann-date" required>
+        </div>
+        <div class="modal-form-group">
+          <label>Category</label>
+          <select class="field" id="ann-cat">
+            <option value="Advisory">Advisory</option>
+            <option value="Health">Health</option>
+            <option value="Event">Event</option>
+          </select>
+        </div>
+      `,
+      confirmText: 'Publish',
+      onConfirm: async () => {
+        const title = document.getElementById('ann-title').value.trim();
+        const description = document.getElementById('ann-desc').value.trim();
+        const eventDate = document.getElementById('ann-date').value;
+        const category = document.getElementById('ann-cat').value;
+
+        await DataService.createAnnouncement({
+          barangayId: user.barangayId,
+          title,
+          description,
+          eventDate,
+          category
+        });
+        closeModal();
+        renderAnnouncements();
+      }
+    });
+  };
+
+
+  document.querySelectorAll('[data-archive-ann]').forEach(btn => {
+    btn.onclick = async (e) => {
       e.preventDefault();
-      const id = Number(a.dataset.deleteAnn);
-      const item = DB.announcements.find(x => x.id === id);
+      await DataService.archiveAnnouncement(btn.dataset.archiveAnn);
+      renderAnnouncements();
+    };
+  });
+
+
+  document.querySelectorAll('[data-repost-ann]').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      await DataService.unarchiveAnnouncement(btn.dataset.repostAnn);
+      renderAnnouncements();
+    };
+  });
+
+
+  document.querySelectorAll('[data-edit-ann]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      const annId = btn.dataset.editAnn;
+      const ann = announcements.find(a => a.id == annId);
+      if (!ann) return;
+
       openCustomModal({
-        title: 'Archive announcement',
-        contentHtml: `<p style="font-size:13px; color:var(--muted); margin:0;">Move "<b>${item.title}</b>" to past announcements archive?</p>`,
-        confirmText: 'Archive',
-        confirmClass: 'btn-small ghost',
-        onConfirm: () => {
-          DB.pastAnnouncements.unshift({ id: item.id, title: item.title, tag: item.tag, posted: item.posted });
-          DB.announcements = DB.announcements.filter(x => x.id !== id);
-          saveDB();
+        title: 'Edit announcement',
+        contentHtml: `
+          <div class="modal-form-group">
+            <label>Title</label>
+            <input class="field" id="edit-ann-title" value="${ann.title || ''}" required>
+          </div>
+          <div class="modal-form-group">
+            <label>Description</label>
+            <textarea class="field" id="edit-ann-desc" style="height:60px;resize:none;" required>${ann.description || ''}</textarea>
+          </div>
+          <div class="modal-form-group">
+            <label>Event Date</label>
+            <input class="field" type="date" id="edit-ann-date" value="${ann.event_date || ''}" required>
+          </div>
+          <div class="modal-form-group">
+            <label>Category</label>
+            <select class="field" id="edit-ann-cat">
+              <option value="Advisory" ${(ann.category || ann.tag) === 'Advisory' ? 'selected' : ''}>Advisory</option>
+              <option value="Health" ${(ann.category || ann.tag) === 'Health' ? 'selected' : ''}>Health</option>
+              <option value="Event" ${(ann.category || ann.tag) === 'Event' ? 'selected' : ''}>Event</option>
+            </select>
+          </div>
+        `,
+        confirmText: 'Save Changes',
+        onConfirm: async () => {
+          const title = document.getElementById('edit-ann-title').value.trim();
+          const description = document.getElementById('edit-ann-desc').value.trim();
+          const eventDate = document.getElementById('edit-ann-date').value;
+          const category = document.getElementById('edit-ann-cat').value;
+
+          await DataService.updateAnnouncement(annId, {
+            title,
+            description,
+            eventDate,
+            category
+          });
           closeModal();
           renderAnnouncements();
         }
       });
     };
   });
-
-  document.querySelectorAll('[data-repost-ann]').forEach(b => {
-    b.onclick = () => {
-      const item = DB.pastAnnouncements.find(p => p.id === Number(b.dataset.repostAnn));
-      DB.announcements.unshift({
-        id: Date.now(),
-        title: item.title,
-        tag: item.tag,
-        posted: 'Today',
-        day: null
-      });
-      saveDB();
-      renderAnnouncements();
-    };
-  });
 }
 
-function openAnnouncementModal() {
-  const dateInfo = getCurrentDate();
-  const todayVal = `${dateInfo.year}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(dateInfo.day).padStart(2, '0')}`;
-
-  openCustomModal({
-    title: 'New announcement',
-    contentHtml: `
-      <div class="modal-form-group">
-        <label>Title / Bulletin Headline</label>
-        <input class="field" id="ann-title" placeholder="e.g. Free anti-rabies vaccination" required autofocus>
-      </div>
-
-      <div class="modal-form-group">
-        <label>Category</label>
-        <select class="field" id="ann-tag">
-          <option value="Health">Health</option>
-          <option value="Advisory" selected>Advisory</option>
-          <option value="Event">Event</option>
-        </select>
-      </div>
-
-      <div class="modal-form-group">
-        <label>Event Date (Select on Calendar)</label>
-        <input class="field" type="date" id="ann-date-picker" value="${todayVal}">
-      </div>
-    `,
-    confirmText: 'Publish bulletin',
-    onConfirm: () => {
-      const title = document.getElementById('ann-title').value.trim();
-      const tag = document.getElementById('ann-tag').value;
-      const dateVal = document.getElementById('ann-date-picker').value;
-      let day = null;
-
-      if (dateVal) {
-        const parts = dateVal.split('-');
-        day = parseInt(parts[2], 10);
-      }
-
-      DB.announcements.unshift({
-        id: Date.now(),
-        title,
-        tag,
-        posted: 'Today',
-        day
-      });
-
-      saveDB();
-      closeModal();
-      renderAnnouncements();
-    }
-  });
-}
-
-// Screen 8: Emergency Contacts
 async function renderEmergency() {
-  const trs = DB.emergency.map(r => `
+  const user = getActiveUser();
+  let contacts = [];
+
+  try {
+    contacts = await DataService.getEmergencyContacts(user.barangayId) || [];
+  } catch (err) {
+    console.error('Error fetching emergency contacts:', err);
+  }
+
+  const trs = contacts.map(r => `
     <tr>
       <td>
         <div class="name-cell">
@@ -859,8 +1052,8 @@ async function renderEmergency() {
           <div class="t">${r.name}</div>
         </div>
       </td>
-      <td>${r.cat}</td>
-      <td>${r.num}</td>
+      <td>${r.category || 'General'}</td>
+      <td><b>${r.contact_number || r.contactNumber || r.num || r.number || 'No number'}</b></td>
       <td>
         <div class="table-actions">
           <button class="link-btn" data-edit-em="${r.id}">Edit</button>
@@ -874,27 +1067,24 @@ async function renderEmergency() {
     <div class="main-head">
       <div>
         <h3>Emergency contacts</h3>
-        <p>Public hotlines displayed directly on the mobile app.</p>
+        <p>Public hotlines broadcasted to the citizen app.</p>
       </div>
       <button class="btn-small" id="btn-add-em">+ Add contact</button>
     </div>
-    <div class="table-responsive">
-      <table class="table">
-        <thead><tr><th>Name</th><th>Category</th><th>Number</th><th></th></tr></thead>
-        <tbody>${trs}</tbody>
-      </table>
-    </div>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Category</th><th>Number</th><th></th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No contacts registered.</td></tr>'}</tbody>
+    </table>
   `;
   stage.innerHTML = shell(main, 'emergency');
-  syncUserLabel();
 
   document.getElementById('btn-add-em').onclick = () => {
     openCustomModal({
       title: 'Add emergency contact',
       contentHtml: `
         <div class="modal-form-group">
-          <label>Contact Name / Agency</label>
-          <input class="field" id="em-name" placeholder="e.g. MDRRMO Action Center" required>
+          <label>Agency / Contact Name</label>
+          <input class="field" id="em-name" required placeholder="e.g. Police Action Center">
         </div>
         <div class="modal-form-group">
           <label>Category</label>
@@ -904,17 +1094,21 @@ async function renderEmergency() {
           </select>
         </div>
         <div class="modal-form-group">
-          <label>Hotline Number</label>
-          <input class="field" id="em-num" placeholder="e.g. (02) 8123 4567" required>
+          <label>Contact Number</label>
+          <input class="field" id="em-num" required placeholder="e.g. 911 or 0917-XXX-XXXX">
         </div>
       `,
-      confirmText: 'Save contact',
-      onConfirm: () => {
+      confirmText: 'Save Contact',
+      onConfirm: async () => {
         const name = document.getElementById('em-name').value;
-        const cat = document.getElementById('em-cat').value;
-        const num = document.getElementById('em-num').value;
-        DB.emergency.push({ id: Date.now(), name, cat, num });
-        saveDB();
+        const category = document.getElementById('em-cat').value;
+        const contactNumber = document.getElementById('em-num').value;
+        await DataService.createEmergencyContact({
+          barangayId: user.barangayId,
+          name,
+          category,
+          num: contactNumber
+        });
         closeModal();
         renderEmergency();
       }
@@ -923,19 +1117,35 @@ async function renderEmergency() {
 
   document.querySelectorAll('[data-edit-em]').forEach(b => {
     b.onclick = () => {
-      const item = DB.emergency.find(e => e.id === Number(b.dataset.editEm));
+      const contact = contacts.find(c => c.id == b.dataset.editEm);
+      if (!contact) return;
+
       openCustomModal({
-        title: `Edit ${item.name}`,
+        title: 'Edit emergency contact',
         contentHtml: `
           <div class="modal-form-group">
-            <label>Hotline Phone Number</label>
-            <input class="field" id="em-edit-num" value="${item.num}" required>
+            <label>Agency / Contact Name</label>
+            <input class="field" id="em-edit-name" value="${contact.name || ''}" required>
+          </div>
+          <div class="modal-form-group">
+            <label>Category</label>
+            <select class="field" id="em-edit-cat">
+              <option value="Barangay" ${contact.category === 'Barangay' ? 'selected' : ''}>Barangay</option>
+              <option value="National" ${contact.category === 'National' ? 'selected' : ''}>National</option>
+            </select>
+          </div>
+          <div class="modal-form-group">
+            <label>Contact Number</label>
+            <input class="field" id="em-edit-num" value="${contact.contact_number || contact.num || ''}" required>
           </div>
         `,
-        confirmText: 'Update number',
-        onConfirm: () => {
-          item.num = document.getElementById('em-edit-num').value;
-          saveDB();
+        confirmText: 'Update Contact',
+        onConfirm: async () => {
+          const name = document.getElementById('em-edit-name').value;
+          const category = document.getElementById('em-edit-cat').value;
+          const num = document.getElementById('em-edit-num').value;
+
+          await DataService.updateEmergencyContact(contact.id, { name, category, num });
           closeModal();
           renderEmergency();
         }
@@ -944,44 +1154,18 @@ async function renderEmergency() {
   });
 
   document.querySelectorAll('[data-del-em]').forEach(b => {
-    b.onclick = () => {
-      const id = Number(b.dataset.delEm);
-      const item = DB.emergency.find(e => e.id === id);
-      openCustomModal({
-        title: 'Delete contact',
-        contentHtml: `<p style="font-size:13px; color:var(--muted); margin:0;">Remove <b>${item.name}</b> from the citizen emergency directory?</p>`,
-        confirmText: 'Delete',
-        confirmClass: 'btn-small ghost',
-        onConfirm: () => {
-          DB.emergency = DB.emergency.filter(e => e.id !== id);
-          saveDB();
-          closeModal();
-          renderEmergency();
-        }
-      });
+    b.onclick = async () => {
+      if (confirm("Delete this emergency contact?")) {
+        await DataService.deleteEmergencyContact(b.dataset.delEm);
+        renderEmergency();
+      }
     };
   });
 }
 
-function syncUserLabel() {
-  const el = document.getElementById('active-user-name');
-  if (el && auth.currentUser) {
-    el.innerText = auth.currentUser.email.split('@')[0];
-  }
+const initialUser = getActiveUser();
+if (initialUser) {
+  showScreen('dashboard');
+} else {
+  showScreen('login');
 }
-
-/* =========================================================================
-   Initialization & Auth Gate (Login Always Appears First)
-   ========================================================================= */
-let userExplicitlyLoggedIn = false;
-
-// Render login page directly upon loading
-renderLogin();
-
-onAuthStateChanged(auth, (user) => {
-  if (user && userExplicitlyLoggedIn) {
-    showScreen('dashboard');
-  } else {
-    showScreen('login');
-  }
-});
