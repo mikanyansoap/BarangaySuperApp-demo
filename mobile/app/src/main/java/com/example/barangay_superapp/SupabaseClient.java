@@ -9,8 +9,8 @@ import okhttp3.RequestBody;
 import org.json.JSONObject;
 
 public class SupabaseClient {
-    // Deduced the Supabase Project URL based on your Supabase dashboard link!
-    public static final String SUPABASE_URL = "https://iglrczxuzljczcibvoif.supabase.co"; 
+    // The REAL Supabase Project URL
+    public static final String SUPABASE_URL = "https://wjrabyrmhymwtvcjywea.supabase.co"; 
     
     public static final String SUPABASE_PUBLIC_KEY = "sb_publishable_eKmPItxbga4MB9Rn2JuMJw_04jCCvGE";
     
