@@ -3,6 +3,7 @@ package com.example.barangay_superapp;
 import android.app.DatePickerDialog;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Pair;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -79,6 +80,62 @@ public class PreviewActivity extends AppCompatActivity {
                     
                     datePickerDialog.show();
                 });
+            }
+        }
+
+        // ====================================================================
+        // INTERACTIVE DEMO LOGIC FOR "AI CHATBOT"
+        // ====================================================================
+        if (layoutId == R.layout.ai_chatbot) {
+            RecyclerView rvChatMessages = findViewById(R.id.rvChatMessages);
+            if (rvChatMessages != null) {
+                // List of messages (pairs of isUser, text)
+                List<Pair<Boolean, String>> messages = new ArrayList<>();
+                messages.add(new Pair<>(false, "Hello! I am your Barangay SuperApp Assistant. How can I help you today?"));
+                messages.add(new Pair<>(true, "What are the requirements for a Barangay Clearance?"));
+                messages.add(new Pair<>(false, "To request a Barangay Clearance, you will need:\n\n1. A valid ID\n2. A recent Cedula\n3. The application fee (₱50.00)\n\nWould you like me to redirect you to the Request Document form?"));
+
+                RecyclerView.Adapter<RecyclerView.ViewHolder> chatAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+                    @NonNull
+                    @Override
+                    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chat_message, parent, false);
+                        return new RecyclerView.ViewHolder(view) {};
+                    }
+
+                    @Override
+                    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                        Pair<Boolean, String> msg = messages.get(position);
+                        boolean isUser = msg.first;
+                        String text = msg.second;
+
+                        LinearLayout layoutBot = holder.itemView.findViewById(R.id.layoutBotMessage);
+                        LinearLayout layoutUser = holder.itemView.findViewById(R.id.layoutUserMessage);
+                        TextView tvBot = holder.itemView.findViewById(R.id.tvBotText);
+                        TextView tvUser = holder.itemView.findViewById(R.id.tvUserText);
+
+                        if (isUser) {
+                            layoutBot.setVisibility(View.GONE);
+                            layoutUser.setVisibility(View.VISIBLE);
+                            tvUser.setText(text);
+                        } else {
+                            layoutBot.setVisibility(View.VISIBLE);
+                            layoutUser.setVisibility(View.GONE);
+                            tvBot.setText(text);
+                        }
+                    }
+
+                    @Override
+                    public int getItemCount() {
+                        return messages.size();
+                    }
+                };
+
+                rvChatMessages.setLayoutManager(new LinearLayoutManager(this));
+                rvChatMessages.setAdapter(chatAdapter);
+                
+                // Scroll to the bottom automatically
+                rvChatMessages.scrollToPosition(messages.size() - 1);
             }
         }
 
