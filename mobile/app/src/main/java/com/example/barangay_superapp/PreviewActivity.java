@@ -5,10 +5,12 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Pair;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.content.Intent;
 import androidx.appcompat.app.AlertDialog;
@@ -93,8 +95,52 @@ public class PreviewActivity extends AppCompatActivity {
         }
 
         // ====================================================================
-        // SIGN UP FORM LOGIC -> SUPABASE INTEGRATION
+        // SIGN UP & BRGY ID FORM LOGIC (Spinners + Supabase Integration)
         // ====================================================================
+        if (layoutId == R.layout.sign_up || layoutId == R.layout.request_brgy_id) {
+            // Populate Spinners to prevent "empty" lists!
+            Spinner spinnerGender = findViewById(R.id.spinnerGender);
+            if (spinnerGender != null) {
+                ArrayAdapter<String> adapterGender = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Male", "Female", "Other", "Prefer not to say"});
+                spinnerGender.setAdapter(adapterGender);
+            }
+
+            Spinner spinnerIdType = findViewById(R.id.spinnerIdType);
+            if (spinnerIdType != null) {
+                ArrayAdapter<String> adapterId = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Passport", "Driver's License", "UMID", "PhilSys ID", "Voter's ID", "Postal ID", "Others"});
+                spinnerIdType.setAdapter(adapterId);
+            }
+
+            Spinner spinnerCivilStatus = findViewById(R.id.spinnerCivilStatus);
+            if (spinnerCivilStatus != null) {
+                ArrayAdapter<String> adapterCivil = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Single", "Married", "Widowed", "Separated"});
+                spinnerCivilStatus.setAdapter(adapterCivil);
+            }
+
+            // Fetch Provinces from real API to populate the Province spinner!
+            Spinner spinnerProvince = findViewById(R.id.spinnerProvince);
+            if (spinnerProvince != null) {
+                PSGCClient.fetchProvinces(new PSGCClient.LocationCallback() {
+                    @Override
+                    public void onSuccess(List<String> names) {
+                        runOnUiThread(() -> {
+                            ArrayAdapter<String> adapterProv = new ArrayAdapter<>(PreviewActivity.this, android.R.layout.simple_spinner_dropdown_item, names);
+                            spinnerProvince.setAdapter(adapterProv);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        // Fallback list if the internet/API fails
+                        runOnUiThread(() -> {
+                            ArrayAdapter<String> fallbackProv = new ArrayAdapter<>(PreviewActivity.this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Cavite (API Failed to Load)", "Metro Manila", "Laguna"});
+                            spinnerProvince.setAdapter(fallbackProv);
+                        });
+                    }
+                });
+            }
+        }
+
         if (layoutId == R.layout.sign_up) {
             CardView btnCreateAccount = findViewById(R.id.btnCreateAccount);
             EditText etFirstName = findViewById(R.id.etFirstName);
@@ -272,6 +318,70 @@ public class PreviewActivity extends AppCompatActivity {
                             }
                         });
                     }
+                });
+            }
+        }
+
+        // ====================================================================
+        // SIGN IN FORM LOGIC -> SUPABASE INTEGRATION
+        // ====================================================================
+        if (layoutId == R.layout.sign_in) {
+            CardView btnSignIn = findViewById(R.id.btnSignIn);
+            EditText etUsername = findViewById(R.id.etUsername);
+            EditText etPassword = findViewById(R.id.etPassword);
+            TextView tvCreateAccount = findViewById(R.id.tvCreateAccount);
+
+            if (tvCreateAccount != null) {
+                tvCreateAccount.setOnClickListener(v -> {
+                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                    intent.putExtra("LAYOUT_ID", R.layout.sign_up);
+                    startActivity(intent);
+                    finish();
+                });
+            }
+
+            if (btnSignIn != null) {
+                btnSignIn.setOnClickListener(v -> {
+                    String email = etUsername != null ? etUsername.getText().toString().trim() : "";
+                    String password = etPassword != null ? etPassword.getText().toString() : "";
+
+                    if (email.isEmpty() || password.isEmpty()) {
+                        Toast.makeText(this, "Please enter your email and password.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    Toast.makeText(this, "Signing in...", Toast.LENGTH_SHORT).show();
+
+                    SupabaseClient.signInUser(email, password, new Callback() {
+                        @Override
+                        public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                            runOnUiThread(() -> Toast.makeText(PreviewActivity.this, "Network Error: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                        }
+
+                        @Override
+                        public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                            String responseBody = response.body() != null ? response.body().string() : "";
+                            runOnUiThread(() -> {
+                                if (response.isSuccessful()) {
+                                    Toast.makeText(PreviewActivity.this, "Sign In Successful!", Toast.LENGTH_LONG).show();
+                                    // Transition to Dashboard
+                                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                                    intent.putExtra("LAYOUT_ID", R.layout.dashboard);
+                                    startActivity(intent);
+                                    finish();
+                                } else {
+                                    // Handle Incorrect Password / Account missing
+                                    try {
+                                        JSONObject errorJson = new JSONObject(responseBody);
+                                        String errorMsg = errorJson.optString("error_description", "Invalid login credentials.");
+                                        Toast.makeText(PreviewActivity.this, "Sign In Failed: " + errorMsg, Toast.LENGTH_LONG).show();
+                                    } catch (Exception ex) {
+                                        Toast.makeText(PreviewActivity.this, "Sign In Failed. Please check your credentials.", Toast.LENGTH_LONG).show();
+                                    }
+                                }
+                            });
+                        }
+                    });
                 });
             }
         }
@@ -626,24 +736,28 @@ public class PreviewActivity extends AppCompatActivity {
     }
 
     private void loadMockData() {
-        try {
-            InputStream is = getAssets().open("mock_data.json");
-            int size = is.available();
-            byte[] buffer = new byte[size];
-            int bytesRead = is.read(buffer);
-            is.close();
-            
-            if (bytesRead > 0) {
-                String jsonStr = new String(buffer, StandardCharsets.UTF_8);
-                JSONObject obj = new JSONObject(jsonStr);
-                JSONArray requestsArray = obj.getJSONArray("requests");
+        // Run on background thread to prevent lag/UI freezing!
+        new Thread(() -> {
+            try {
+                InputStream is = getAssets().open("mock_data.json");
+                int size = is.available();
+                byte[] buffer = new byte[size];
+                int bytesRead = is.read(buffer);
+                is.close();
+                
+                if (bytesRead > 0) {
+                    String jsonStr = new String(buffer, StandardCharsets.UTF_8);
+                    JSONObject obj = new JSONObject(jsonStr);
+                    JSONArray requestsArray = obj.getJSONArray("requests");
 
-                allRequests.clear();
-                for (int i = 0; i < requestsArray.length(); i++) {
-                    allRequests.add(requestsArray.getJSONObject(i));
+                    allRequests.clear();
+                    for (int i = 0; i < requestsArray.length(); i++) {
+                        allRequests.add(requestsArray.getJSONObject(i));
+                    }
                 }
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
-        } catch (Exception ex) {
-        }
+        }).start();
     }
 }

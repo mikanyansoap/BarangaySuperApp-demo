@@ -42,4 +42,23 @@ public class SupabaseClient {
             e.printStackTrace();
         }
     }
+
+    // Handles User Sign In via Supabase Auth REST API
+    public static void signInUser(String email, String password, Callback callback) {
+        try {
+            JSONObject bodyJson = new JSONObject();
+            bodyJson.put("email", email);
+            bodyJson.put("password", password);
+
+            RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
+            // Supabase login endpoint:
+            Request request = getAuthenticatedBuilder("/auth/v1/token?grant_type=password")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }
