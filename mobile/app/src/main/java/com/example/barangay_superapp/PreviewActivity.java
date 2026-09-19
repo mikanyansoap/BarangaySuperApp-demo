@@ -88,12 +88,14 @@ public class PreviewActivity extends AppCompatActivity {
         // ====================================================================
         if (layoutId == R.layout.ai_chatbot) {
             RecyclerView rvChatMessages = findViewById(R.id.rvChatMessages);
-            if (rvChatMessages != null) {
-                // List of messages (pairs of isUser, text)
+            CardView btnSendMessage = findViewById(R.id.btnSendMessage);
+            EditText etChatMessage = findViewById(R.id.etChatMessage);
+
+            if (rvChatMessages != null && btnSendMessage != null && etChatMessage != null) {
+                // List of messages
                 List<Pair<Boolean, String>> messages = new ArrayList<>();
+                // Starting with just the welcome message!
                 messages.add(new Pair<>(false, "Hello! I am your Barangay SuperApp Assistant. How can I help you today?"));
-                messages.add(new Pair<>(true, "What are the requirements for a Barangay Clearance?"));
-                messages.add(new Pair<>(false, "To request a Barangay Clearance, you will need:\n\n1. A valid ID\n2. A recent Cedula\n3. The application fee (₱50.00)\n\nWould you like me to redirect you to the Request Document form?"));
 
                 RecyclerView.Adapter<RecyclerView.ViewHolder> chatAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     @NonNull
@@ -113,11 +115,14 @@ public class PreviewActivity extends AppCompatActivity {
                         LinearLayout layoutUser = holder.itemView.findViewById(R.id.layoutUserMessage);
                         TextView tvBot = holder.itemView.findViewById(R.id.tvBotText);
                         TextView tvUser = holder.itemView.findViewById(R.id.tvUserText);
+                        CardView cardUserMedia = holder.itemView.findViewById(R.id.cardUserMedia);
 
                         if (isUser) {
                             layoutBot.setVisibility(View.GONE);
                             layoutUser.setVisibility(View.VISIBLE);
                             tvUser.setText(text);
+                            // Hide the media block by default unless you explicitly add an image logic here later
+                            if (cardUserMedia != null) cardUserMedia.setVisibility(View.GONE);
                         } else {
                             layoutBot.setVisibility(View.VISIBLE);
                             layoutUser.setVisibility(View.GONE);
@@ -134,8 +139,28 @@ public class PreviewActivity extends AppCompatActivity {
                 rvChatMessages.setLayoutManager(new LinearLayoutManager(this));
                 rvChatMessages.setAdapter(chatAdapter);
                 
-                // Scroll to the bottom automatically
-                rvChatMessages.scrollToPosition(messages.size() - 1);
+                // Add click listener for sending messages
+                btnSendMessage.setOnClickListener(v -> {
+                    String userText = etChatMessage.getText().toString().trim();
+                    if (!userText.isEmpty()) {
+                        // 1. Add user message to the list
+                        messages.add(new Pair<>(true, userText));
+                        etChatMessage.setText(""); // clear the input box
+                        
+                        // Tell the adapter a new item was added at the very end
+                        chatAdapter.notifyItemInserted(messages.size() - 1);
+                        // Instantly scroll to the bottom so the user sees their message
+                        rvChatMessages.scrollToPosition(messages.size() - 1);
+
+                        // 2. Simulate AI bot thinking and returning "error" (since no backend is connected yet)
+                        // We use a postDelayed to make it feel like the bot is actually typing
+                        rvChatMessages.postDelayed(() -> {
+                            messages.add(new Pair<>(false, "Error: Cannot connect to AI server. Please try again later."));
+                            chatAdapter.notifyItemInserted(messages.size() - 1);
+                            rvChatMessages.scrollToPosition(messages.size() - 1);
+                        }, 800); // 800 milliseconds delay
+                    }
+                });
             }
         }
 
