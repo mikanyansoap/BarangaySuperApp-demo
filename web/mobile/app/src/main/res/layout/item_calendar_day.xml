@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingVertical="8dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:background="?android:attr/selectableItemBackground">
+
+    <!-- Container for the day number (Allows dynamic highlighting for "current day") -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardDayBackground"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        app:cardBackgroundColor="@android:color/transparent"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="0dp">
+
+        <TextView
+            android:id="@+id/tvDayNumber"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:textColor="#11231D"
+            android:textSize="14sp"
+            tools:text="9"
+            tools:textColor="#11231D" />
+    </androidx.cardview.widget.CardView>
+
+    <!-- The event dot indicator -->
+    <!-- You will toggle visibility to VISIBLE in code if this specific date has an event -->
+    <View
+        android:id="@+id/viewEventDot"
+        android:layout_width="4dp"
+        android:layout_height="4dp"
+        android:layout_marginTop="4dp"
+        android:background="#DBA03B"
+        android:visibility="invisible" />
+
+</LinearLayout>

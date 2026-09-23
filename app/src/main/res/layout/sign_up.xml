@@ -1,0 +1,700 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F5ED"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <!-- Scrollable container -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="32dp">
+
+            <!-- Real Logo -->
+            <ImageView
+                android:layout_width="160dp"
+                android:layout_height="60dp"
+                android:layout_marginBottom="24dp"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter"
+                android:src="@drawable/app_logo_name" />
+
+            <!-- Header Text -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Create your account"
+                android:textColor="#11231D"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="One account gets you documents, reports, and updates from your barangay. Your barangay will verify your details before your account is activated."
+                android:textColor="#737973"
+                android:textSize="16sp" />
+
+            <!-- Input Form Section -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:orientation="vertical">
+
+                <!-- First Name -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="First name"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etFirstName"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="Juan"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Middle Name (optional) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Middle name "
+                        android:textColor="#2A3532"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="(optional)"
+                        android:textColor="#8D9691"
+                        android:textSize="12sp" />
+                </LinearLayout>
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etMiddleName"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="Santos"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Last Name -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Last name"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etLastName"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="Dela Cruz"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Suffix (optional) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Suffix "
+                        android:textColor="#2A3532"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="(optional)"
+                        android:textColor="#8D9691"
+                        android:textSize="14sp" />
+                </LinearLayout>
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etSuffix"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="Jr., III, etc."
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPersonName" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Demographics (Row) -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:orientation="horizontal">
+
+                    <!-- Date of Birth -->
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Date of Birth"
+                            android:textColor="#2A3532"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                        <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                            <EditText android:id="@+id/etFormDOB" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:hint="MM/DD/YYYY" android:paddingHorizontal="16dp" android:textSize="14sp" android:focusable="false" android:clickable="true" />
+                        </androidx.cardview.widget.CardView>
+                    </LinearLayout>
+
+                    <!-- Gender -->
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Gender"
+                            android:textColor="#2A3532"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                        <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                            <Spinner android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="48dp" android:background="@android:color/transparent" android:paddingHorizontal="12dp" />
+                        </androidx.cardview.widget.CardView>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Place of Birth -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Place of birth"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etPlaceOfBirth"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="City / Municipality, Province"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPostalAddress" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Mobile number (with +63 prefix box) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Mobile number"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <!-- +63 Prefix Box -->
+                    <androidx.cardview.widget.CardView
+                        android:layout_width="60dp"
+                        android:layout_height="48dp"
+                        app:cardBackgroundColor="#E6E8E6"
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="0dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:text="+63"
+                            android:textColor="#11231D"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </androidx.cardview.widget.CardView>
+
+                    <!-- Phone Number Input -->
+                    <androidx.cardview.widget.CardView
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        app:cardBackgroundColor="#FFFFFF"
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="0dp">
+                        <EditText
+                            android:id="@+id/etMobileNumber"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@android:color/transparent"
+                            android:hint="9XX XXX XXXX"
+                            android:paddingHorizontal="16dp"
+                            android:textColor="#11231D"
+                            android:textColorHint="#AAB3AE"
+                            android:textSize="16sp"
+                            android:maxLength="10"
+                            android:inputType="phone" />
+                    </androidx.cardview.widget.CardView>
+                </LinearLayout>
+
+                <!-- Email address (optional) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Email address "
+                        android:textColor="#2A3532"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="(optional)"
+                        android:textColor="#8D9691"
+                        android:textSize="14sp" />
+                </LinearLayout>
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etEmail"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="juan@email.com"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textEmailAddress" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Province Spinner -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Province"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <AutoCompleteTextView
+                        android:id="@+id/spinnerProvince"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:paddingHorizontal="12dp"
+                        android:hint="Type or select province..."
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="14sp"
+                        android:completionThreshold="1"
+                        android:inputType="textNoSuggestions" />
+                    <!-- Visual Dropdown Arrow -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|center_vertical"
+                        android:paddingEnd="16dp"
+                        android:text="▼"
+                        android:textColor="#2A3532"
+                        android:textSize="12sp" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- City / municipality Spinner -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="City / municipality"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <AutoCompleteTextView
+                        android:id="@+id/spinnerCity"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:paddingHorizontal="12dp"
+                        android:hint="Type or select city..."
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="14sp"
+                        android:completionThreshold="1"
+                        android:inputType="textNoSuggestions" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|center_vertical"
+                        android:paddingEnd="16dp"
+                        android:text="▼"
+                        android:textColor="#2A3532"
+                        android:textSize="12sp" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Barangay Spinner -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Barangay"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <AutoCompleteTextView
+                        android:id="@+id/spinnerBarangay"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:paddingHorizontal="12dp"
+                        android:hint="Type or select barangay..."
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="14sp"
+                        android:completionThreshold="1"
+                        android:inputType="textNoSuggestions" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|center_vertical"
+                        android:paddingEnd="16dp"
+                        android:text="▼"
+                        android:textColor="#2A3532"
+                        android:textSize="12sp" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- House no., street, subdivision -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="House no., street, subdivision"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etAddress"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="e.g. 123 Rizal St., Greenview Subd."
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPostalAddress" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Valid ID type Spinner -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Valid ID type"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <Spinner
+                        android:id="@+id/spinnerIdType"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:paddingHorizontal="12dp"
+                        android:spinnerMode="dropdown" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|center_vertical"
+                        android:paddingEnd="16dp"
+                        android:text="▼"
+                        android:textColor="#2A3532"
+                        android:textSize="12sp" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Upload photo of ID -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Upload photo of ID"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cardUploadId"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp">
+
+                        <!-- Camera icon placeholder -->
+                        <View
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:background="#AAB3AE" />
+
+                        <TextView
+                            android:id="@+id/tvUploadIdText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="Upload photo of ID"
+                            android:textColor="#737973"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="AI reads your ID number and details straight from the photo — no need to type them. Your barangay reviews the scan before approving your account."
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+
+                <!-- Password Input -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Password"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <EditText
+                        android:id="@+id/etSignUpPassword"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:hint="At least 8 characters"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#11231D"
+                        android:textColorHint="#AAB3AE"
+                        android:textSize="16sp"
+                        android:inputType="textPassword" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Terms and Conditions Checkbox Area -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/cbTerms"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#247D76" />
+
+                    <!-- Formatting the terms text -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingExtra="4dp"
+                        android:textColor="#737973"
+                        android:textSize="14sp"
+                        android:text="I agree to the Terms and Conditions and Privacy Policy, and confirm the details above are accurate." />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Each ID number can only be registered once, to keep one account per resident. Your barangay reviews new registrations before they're activated — see the Barangay page in your account for status."
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- Create Account Button -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/btnCreateAccount"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="32dp"
+                app:cardBackgroundColor="#174A45"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="Create account"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- Already registered Link -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="40dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Already registered? "
+                    android:textColor="#8D9691"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvSignInRedirect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Sign in"
+                    android:textColor="#247D76"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
