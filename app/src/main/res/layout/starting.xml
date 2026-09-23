@@ -36,14 +36,17 @@
                     android:layout_height="0dp"
                     android:layout_weight="1" />
 
-                <!-- Real Logo -->
+                <!-- Responsive Brand Logo -->
                 <ImageView
-                    android:layout_width="343dp"
-                    android:layout_height="166dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
+                    android:paddingHorizontal="32dp"
+                    android:maxHeight="90dp"
                     android:adjustViewBounds="true"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/app_logo_name" />
+                    android:src="@drawable/app_logo_name"
+                    android:contentDescription="Barangay SuperApp Logo" />
 
                 <!-- App Name -->
 

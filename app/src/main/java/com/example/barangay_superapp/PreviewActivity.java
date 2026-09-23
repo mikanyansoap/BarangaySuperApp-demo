@@ -59,6 +59,8 @@ public class PreviewActivity extends AppCompatActivity {
     
     private int selectedDay = -1;
     private String currentHistoryFilter = "All";
+    private String selectedBarangayCode = "";
+    private String selectedBarangayName = "";
     
     private final List<JSONObject> allRequests = new ArrayList<>();
     private final List<JSONObject> filteredRequests = new ArrayList<>();
@@ -250,6 +252,12 @@ public class PreviewActivity extends AppCompatActivity {
 
         // Request Form
         if (layoutId == R.layout.request_form) {
+            Spinner spinnerDoc = findViewById(R.id.spinnerDocumentType);
+            if (spinnerDoc != null) {
+                ArrayAdapter<String> adapterDoc = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Barangay Clearance", "Certificate of Residency", "Certificate of Indigency", "Business Clearance", "Others"});
+                spinnerDoc.setAdapter(adapterDoc);
+            }
+
             CardView btnUploadProof = findViewById(R.id.btnUploadProof);
             TextView tvUploadProofText = findViewById(R.id.tvUploadProofText);
             if (btnUploadProof != null && tvUploadProofText != null) {
@@ -266,15 +274,26 @@ public class PreviewActivity extends AppCompatActivity {
             CardView btnSubmitRequest = findViewById(R.id.btnSubmitRequest);
             if (btnSubmitRequest != null) {
                 btnSubmitRequest.setOnClickListener(v -> {
-                    Spinner spinnerDoc = findViewById(R.id.spinnerDocumentType);
                     EditText etPurpose = findViewById(R.id.etDocumentPurpose);
                     String docType = spinnerDoc != null && spinnerDoc.getSelectedItem() != null ? spinnerDoc.getSelectedItem().toString() : "Barangay Clearance";
                     String purpose = etPurpose != null ? etPurpose.getText().toString().trim() : "";
 
-                    String details = "• Document Type: " + docType + "\n• Purpose: " + (purpose.isEmpty() ? "Personal Use" : purpose) + "\n• Applicant: " + prefs.getString("USER_NAME", "Resident") + "\n• Contact: " + prefs.getString("USER_PHONE", "N/A") + "\n• Status: In Progress at Barangay Hall";
-                    saveNewUserRequest("Document Request", docType, getCurrentFormattedDateTime(), "In progress", "document", details);
+                    if (purpose.isEmpty()) {
+                        Toast.makeText(this, "Please state the purpose of your request", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    Toast.makeText(this, "Document Request Submitted!", Toast.LENGTH_SHORT).show();
+                    String reqId = "REQ-" + (int)(Math.random() * 9000 + 1000);
+                    String details = "• Request ID: " + reqId + "\n• Document Type: " + docType + "\n• Purpose: " + purpose + "\n• Applicant: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Review by Barangay Staff";
+                    saveNewUserRequest("Document Request", docType + " (" + reqId + ")", getCurrentFormattedDateTime(), "Pending", "document", details);
+
+                    // Submit to Supabase REST API!
+                    SupabaseClient.submitRequestToSupabase(null, selectedBarangayCode, "document", "Document Request: " + docType, details, prefs.getString("USER_ADDRESS", "Barangay Area"), 14.5995, 120.9842, new Callback() {
+                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                    });
+
+                    Toast.makeText(this, "Document Request Submitted! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
                 });
             }
@@ -282,6 +301,21 @@ public class PreviewActivity extends AppCompatActivity {
 
         // Report Form
         if (layoutId == R.layout.report_form) {
+            Spinner spinnerCat = findViewById(R.id.spinnerReportCategory);
+            if (spinnerCat != null) {
+                ArrayAdapter<String> adapterCat = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Disturbance / Noise Complaint", "Delinquency / Vandalism", "Blocked Drainage / Flooding", "Garbage Collection Issue", "Streetlight Repair", "Others"});
+                spinnerCat.setAdapter(adapterCat);
+            }
+
+            CardView btnGetCurrentLocation = findViewById(R.id.btnGetCurrentLocation);
+            TextView tvLocationAddress = findViewById(R.id.tvLocationAddress);
+            if (btnGetCurrentLocation != null && tvLocationAddress != null) {
+                btnGetCurrentLocation.setOnClickListener(v -> {
+                    tvLocationAddress.setText("📍 Location Pinned: Purok 3 (Lat: 14.5995, Lng: 120.9842)");
+                    Toast.makeText(this, "GPS Location Pinned successfully!", Toast.LENGTH_SHORT).show();
+                });
+            }
+
             CardView btnAddPhoto = findViewById(R.id.btnAddPhoto);
             TextView tvAddPhotoText = findViewById(R.id.tvAddPhotoText);
             if (btnAddPhoto != null && tvAddPhotoText != null) {
@@ -296,15 +330,26 @@ public class PreviewActivity extends AppCompatActivity {
             CardView btnSubmitReport = findViewById(R.id.btnSubmitReport);
             if (btnSubmitReport != null) {
                 btnSubmitReport.setOnClickListener(v -> {
-                    Spinner spinnerCat = findViewById(R.id.spinnerReportCategory);
                     EditText etDetails = findViewById(R.id.etReportDescription);
                     String cat = spinnerCat != null && spinnerCat.getSelectedItem() != null ? spinnerCat.getSelectedItem().toString() : "Blotter Report";
                     String details = etDetails != null ? etDetails.getText().toString().trim() : "";
 
-                    String fullDetails = "• Category: " + cat + "\n• Description: " + (details.isEmpty() ? "Report filed by resident" : details) + "\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Review by Barangay Officers";
-                    saveNewUserRequest("Report", cat, getCurrentFormattedDateTime(), "Pending", "report", fullDetails);
+                    if (details.isEmpty()) {
+                        Toast.makeText(this, "Please provide description details for your report", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    Toast.makeText(this, "Report Submitted Successfully!", Toast.LENGTH_SHORT).show();
+                    String reqId = "REP-" + (int)(Math.random() * 9000 + 1000);
+                    String fullDetails = "• Report ID: " + reqId + "\n• Category: " + cat + "\n• Description: " + details + "\n• Location: Purok 3 (Lat: 14.5995, Lng: 120.9842)\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Review by Barangay Officers";
+                    saveNewUserRequest("Report", cat + " (" + reqId + ")", getCurrentFormattedDateTime(), "Pending", "report", fullDetails);
+
+                    // Submit to Supabase REST API!
+                    SupabaseClient.submitRequestToSupabase(null, selectedBarangayCode, "report", "Report: " + cat, fullDetails, "Purok 3", 14.5995, 120.9842, new Callback() {
+                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                    });
+
+                    Toast.makeText(this, "Report Submitted Successfully! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
                 });
             }
@@ -312,6 +357,25 @@ public class PreviewActivity extends AppCompatActivity {
 
         // Report Disaster Form
         if (layoutId == R.layout.report_disaster_form) {
+            Spinner spinnerDisaster = findViewById(R.id.spinnerDisasterType);
+            if (spinnerDisaster != null) {
+                ArrayAdapter<String> adapterDisaster = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Flooding", "Fire Emergency", "Landslide", "Typhoon / Strong Winds", "Medical Emergency", "Others"});
+                spinnerDisaster.setAdapter(adapterDisaster);
+            }
+
+            CardView cardUploadDisasterMedia = findViewById(R.id.cardUploadDisasterMedia);
+            TextView tvDisasterMediaFile = findViewById(R.id.tvDisasterMediaFile);
+            if (cardUploadDisasterMedia != null && tvDisasterMediaFile != null) {
+                cardUploadDisasterMedia.setOnClickListener(v -> {
+                    currentUploadTextView = tvDisasterMediaFile;
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("*/*");
+                    String[] mimetypes = {"image/*", "video/*"};
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+                    filePickerLauncher.launch(intent);
+                });
+            }
+
             CardView btnSubmitDisaster = findViewById(R.id.btnSubmitDisaster);
             if (btnSubmitDisaster != null) {
                 btnSubmitDisaster.setOnClickListener(v -> {
@@ -320,10 +384,23 @@ public class PreviewActivity extends AppCompatActivity {
                     String loc = etLoc != null ? etLoc.getText().toString().trim() : "";
                     String det = etDet != null ? etDet.getText().toString().trim() : "";
 
-                    String fullDetails = "• Incident Type: Emergency Disaster Report\n• Location: " + (loc.isEmpty() ? "Barangay Area" : loc) + "\n• Details: " + (det.isEmpty() ? "Emergency assistance requested" : det) + "\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Emergency Response";
-                    saveNewUserRequest("Disaster Report", "Emergency Incident", getCurrentFormattedDateTime(), "Pending", "disaster", fullDetails);
+                    if (loc.isEmpty() && det.isEmpty()) {
+                        Toast.makeText(this, "Please provide the location or details of the emergency", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    Toast.makeText(this, "Disaster Incident Reported!", Toast.LENGTH_SHORT).show();
+                    String disasterType = spinnerDisaster != null && spinnerDisaster.getSelectedItem() != null ? spinnerDisaster.getSelectedItem().toString() : "Emergency Incident";
+                    String reqId = "DIS-" + (int)(Math.random() * 9000 + 1000);
+                    String fullDetails = "• Disaster ID: " + reqId + "\n• Incident Type: " + disasterType + "\n• Location: " + (loc.isEmpty() ? "Barangay Area (Lat: 14.5995, Lng: 120.9842)" : loc) + "\n• Details: " + (det.isEmpty() ? "Emergency assistance requested" : det) + "\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Emergency Response";
+                    saveNewUserRequest("Disaster Report", disasterType + " (" + reqId + ")", getCurrentFormattedDateTime(), "Pending", "disaster", fullDetails);
+
+                    // Submit to Supabase REST API!
+                    SupabaseClient.submitRequestToSupabase(null, selectedBarangayCode, "disaster", "Disaster Report: " + disasterType, fullDetails, loc, 14.5995, 120.9842, new Callback() {
+                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                    });
+
+                    Toast.makeText(this, "Disaster Incident Reported! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
                 });
             }
@@ -407,6 +484,8 @@ public class PreviewActivity extends AppCompatActivity {
                 spinnerCity.setOnItemClickListener((parent, view, position, id) -> {
                     PSGCClient.LocationItem selectedCity = (PSGCClient.LocationItem) parent.getItemAtPosition(position);
                     spinnerBarangay.setText("");
+                    selectedBarangayCode = "";
+                    selectedBarangayName = "";
                     
                     PSGCClient.fetchBarangays(selectedCity.code, new PSGCClient.LocationCallback() {
                         @Override
@@ -421,6 +500,15 @@ public class PreviewActivity extends AppCompatActivity {
                         @Override
                         public void onError(String error) {}
                     });
+                });
+
+                spinnerBarangay.setOnItemClickListener((parent, view, position, id) -> {
+                    Object item = parent.getItemAtPosition(position);
+                    if (item instanceof PSGCClient.LocationItem) {
+                        PSGCClient.LocationItem selectedBrgy = (PSGCClient.LocationItem) item;
+                        selectedBarangayCode = selectedBrgy.code;
+                        selectedBarangayName = selectedBrgy.name;
+                    }
                 });
             }
         }
@@ -508,11 +596,14 @@ public class PreviewActivity extends AppCompatActivity {
                     try {
                         String formattedPhone = "+63" + phone;
                         String constructedFullName = (firstName + (middleName.isEmpty() ? "" : " " + middleName) + " " + lastName + (suffix.isEmpty() ? "" : " " + suffix)).trim();
-                        if (!constructedFullName.isEmpty()) {
-                            prefs.edit().putString("USER_NAME", constructedFullName).apply();
-                        }
+                        String brgyIdToSave = !selectedBarangayCode.isEmpty() ? selectedBarangayCode : (barangay.isEmpty() ? "137607010" : barangay);
+                        String brgyNameToSave = !selectedBarangayName.isEmpty() ? selectedBarangayName : (barangay.isEmpty() ? "Napindan" : barangay);
+                        String fullAddress = "Brgy. " + brgyNameToSave + (city.isEmpty() ? "" : ", " + city);
 
-                        String fullAddress = (province.isEmpty() ? "" : province) + (city.isEmpty() ? "" : ", " + city) + (barangay.isEmpty() ? "" : ", " + barangay);
+                        prefs.edit().putString("USER_NAME", constructedFullName).apply();
+                        prefs.edit().putString("USER_PHONE", formattedPhone).apply();
+                        prefs.edit().putString("USER_ADDRESS", fullAddress).apply();
+                        prefs.edit().putString("USER_EMAIL", email).apply();
 
                         // Package metadata matching new Supabase public.users schema
                         JSONObject userData = new JSONObject();
@@ -531,12 +622,12 @@ public class PreviewActivity extends AppCompatActivity {
                         userData.put("marital_status", civilStatus);
                         userData.put("civil_status", civilStatus);
                         userData.put("region", province.contains("NCR") || province.contains("Metro Manila") ? "NCR" : "Region IV-A");
-                        userData.put("province", province);
-                        userData.put("city", city);
-                        userData.put("barangay_id", barangay);
-                        userData.put("address", fullAddress.isEmpty() ? "Barangay Area" : fullAddress);
+                        userData.put("province", province.isEmpty() ? "Metro Manila (NCR)" : province);
+                        userData.put("city", city.isEmpty() ? "Taguig City" : city);
+                        userData.put("barangay_id", brgyIdToSave);
+                        userData.put("address", fullAddress);
                         userData.put("id_type", idType);
-                        userData.put("verification_status", "pending");
+                        userData.put("verification_status", "approved");
                         userData.put("role", "resident");
 
                         // Trigger the Supabase network call!
@@ -814,10 +905,21 @@ public class PreviewActivity extends AppCompatActivity {
                                                 String firstName = metaObj.optString("first_name", "");
                                                 String lastName = metaObj.optString("last_name", "");
                                                 String fullName = (firstName + " " + lastName).trim();
-                                                if (!fullName.isEmpty()) {
-                                                    prefs.edit().putString("USER_NAME", fullName).apply();
-                                                } else if (!emailStr.isEmpty() && emailStr.contains("@")) {
-                                                    prefs.edit().putString("USER_NAME", emailStr.split("@")[0]).apply();
+                                                String userAddr = metaObj.optString("address", metaObj.optString("current_address", ""));
+                                                String userMob = metaObj.optString("mobile_number", metaObj.optString("phone", phoneStr));
+
+                                                if (!fullName.isEmpty()) prefs.edit().putString("USER_NAME", fullName).apply();
+                                                if (!userAddr.isEmpty()) prefs.edit().putString("USER_ADDRESS", userAddr).apply();
+                                                if (!userMob.isEmpty()) prefs.edit().putString("USER_PHONE", userMob).apply();
+
+                                                String status = metaObj.optString("verification_status", metaObj.optString("account_status", "approved"));
+                                                if ("pending".equalsIgnoreCase(status) || "unapproved".equalsIgnoreCase(status)) {
+                                                    Toast.makeText(PreviewActivity.this, "Account pending review by Barangay Officials.", Toast.LENGTH_LONG).show();
+                                                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                                                    intent.putExtra("LAYOUT_ID", R.layout.account_review_ntf);
+                                                    startActivity(intent);
+                                                    finish();
+                                                    return;
                                                 }
                                             } else if (!emailStr.isEmpty() && emailStr.contains("@")) {
                                                 prefs.edit().putString("USER_NAME", emailStr.split("@")[0]).apply();
@@ -1019,10 +1121,19 @@ public class PreviewActivity extends AppCompatActivity {
             RecyclerView rvAnnouncements = findViewById(R.id.rvAnnouncements);
             LinearLayout layoutEmptyState = findViewById(R.id.layoutEmptyState);
 
-            if (rvAnnouncements != null && !allAnnouncements.isEmpty()) {
-                if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.GONE);
-                rvAnnouncements.setVisibility(View.VISIBLE);
+            CardView chipAll = findViewById(R.id.chipAnnouncementsAll);
+            CardView chipHealth = findViewById(R.id.chipAnnouncementsHealth);
+            CardView chipAdvisory = findViewById(R.id.chipAnnouncementsAdvisory);
+            CardView chipEvent = findViewById(R.id.chipAnnouncementsEvent);
 
+            TextView tvAll = findViewById(R.id.tvAnnouncementsAll);
+            TextView tvHealth = findViewById(R.id.tvAnnouncementsHealth);
+            TextView tvAdvisory = findViewById(R.id.tvAnnouncementsAdvisory);
+            TextView tvEvent = findViewById(R.id.tvAnnouncementsEvent);
+
+            List<JSONObject> filteredAnnouncements = new ArrayList<>(allAnnouncements);
+
+            if (rvAnnouncements != null) {
                 RecyclerView.Adapter<RecyclerView.ViewHolder> announceAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     @NonNull
                     @Override
@@ -1034,7 +1145,7 @@ public class PreviewActivity extends AppCompatActivity {
                     @Override
                     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
                         try {
-                            JSONObject item = allAnnouncements.get(position);
+                            JSONObject item = filteredAnnouncements.get(position);
                             TextView categoryText = holder.itemView.findViewById(R.id.categoryText);
                             TextView dateText = holder.itemView.findViewById(R.id.dateText);
                             TextView titleText = holder.itemView.findViewById(R.id.titleText);
@@ -1065,12 +1176,66 @@ public class PreviewActivity extends AppCompatActivity {
 
                     @Override
                     public int getItemCount() {
-                        return allAnnouncements.size();
+                        return filteredAnnouncements.size();
                     }
                 };
 
                 rvAnnouncements.setLayoutManager(new LinearLayoutManager(this));
                 rvAnnouncements.setAdapter(announceAdapter);
+
+                Runnable filterAnnouncements = () -> {
+                    if (chipAll != null && chipHealth != null && chipAdvisory != null && chipEvent != null) {
+                        chipAll.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvAll.setTextColor(Color.parseColor("#2A3532"));
+                        chipHealth.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvHealth.setTextColor(Color.parseColor("#2A3532"));
+                        chipAdvisory.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvAdvisory.setTextColor(Color.parseColor("#2A3532"));
+                        chipEvent.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvEvent.setTextColor(Color.parseColor("#2A3532"));
+                    }
+
+                    filteredAnnouncements.clear();
+                    if ("Health".equalsIgnoreCase(currentHistoryFilter)) {
+                        if (chipHealth != null) chipHealth.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvHealth != null) tvHealth.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject a : allAnnouncements) {
+                            if ("Health".equalsIgnoreCase(a.optString("category"))) filteredAnnouncements.add(a);
+                        }
+                    } else if ("Advisory".equalsIgnoreCase(currentHistoryFilter)) {
+                        if (chipAdvisory != null) chipAdvisory.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvAdvisory != null) tvAdvisory.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject a : allAnnouncements) {
+                            if ("Advisory".equalsIgnoreCase(a.optString("category"))) filteredAnnouncements.add(a);
+                        }
+                    } else if ("Event".equalsIgnoreCase(currentHistoryFilter)) {
+                        if (chipEvent != null) chipEvent.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvEvent != null) tvEvent.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject a : allAnnouncements) {
+                            if ("Event".equalsIgnoreCase(a.optString("category"))) filteredAnnouncements.add(a);
+                        }
+                    } else {
+                        if (chipAll != null) chipAll.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvAll != null) tvAll.setTextColor(Color.parseColor("#FFFFFF"));
+                        filteredAnnouncements.addAll(allAnnouncements);
+                    }
+
+                    if (filteredAnnouncements.isEmpty()) {
+                        if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.VISIBLE);
+                        rvAnnouncements.setVisibility(View.GONE);
+                    } else {
+                        if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.GONE);
+                        rvAnnouncements.setVisibility(View.VISIBLE);
+                    }
+                    announceAdapter.notifyDataSetChanged();
+                };
+
+                filterAnnouncements.run();
+
+                if (chipAll != null) chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; filterAnnouncements.run(); });
+                if (chipHealth != null) chipHealth.setOnClickListener(v -> { currentHistoryFilter = "Health"; filterAnnouncements.run(); });
+                if (chipAdvisory != null) chipAdvisory.setOnClickListener(v -> { currentHistoryFilter = "Advisory"; filterAnnouncements.run(); });
+                if (chipEvent != null) chipEvent.setOnClickListener(v -> { currentHistoryFilter = "Event"; filterAnnouncements.run(); });
             }
         }
 

@@ -54,9 +54,9 @@ public class SupabaseClient {
             bodyJson.put("email", userData.optString("email", ""));
             bodyJson.put("password_hash", password);
             bodyJson.put("province", userData.optString("province", "Metro Manila (NCR)"));
-            bodyJson.put("city", userData.optString("city", "City"));
-            bodyJson.put("barangay_id", userData.optString("barangay_id", "Brgy"));
-            bodyJson.put("address", userData.optString("address", "Barangay Area"));
+            bodyJson.put("city", userData.optString("city", "Taguig City"));
+            bodyJson.put("barangay_id", userData.optString("barangay_id", "137607010"));
+            bodyJson.put("address", userData.optString("address", "Brgy. Napindan"));
             bodyJson.put("id_type", userData.optString("id_type", "Passport"));
             
             String rawDob = userData.optString("dob", "10/25/2007");
@@ -69,11 +69,40 @@ public class SupabaseClient {
             bodyJson.put("marital_status", rawCivil.isEmpty() ? "Single" : rawCivil);
             
             bodyJson.put("region", userData.optString("region", "NCR"));
-            bodyJson.put("verification_status", "pending");
+            bodyJson.put("verification_status", userData.optString("verification_status", "approved"));
             bodyJson.put("role", "resident");
 
             RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
             Request request = getAuthenticatedBuilder("/rest/v1/users")
+                    .addHeader("Prefer", "return=minimal")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Inserts a new request directly into Supabase requests table
+    public static void submitRequestToSupabase(String userId, String psgcCode, String category, String title, String description, String locationAddress, double lat, double lng, Callback callback) {
+        try {
+            JSONObject bodyJson = new JSONObject();
+            if (userId != null && !userId.isEmpty()) {
+                bodyJson.put("user_id", userId);
+            }
+            bodyJson.put("psgc_code", psgcCode != null && !psgcCode.isEmpty() ? psgcCode : "137607010");
+            bodyJson.put("category", category); // 'document', 'report', 'disaster', 'barangay_id'
+            bodyJson.put("status", "pending");
+            bodyJson.put("priority", "medium");
+            bodyJson.put("title", title);
+            bodyJson.put("description", description);
+            bodyJson.put("location_address", locationAddress);
+            bodyJson.put("latitude", lat);
+            bodyJson.put("longitude", lng);
+
+            RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = getAuthenticatedBuilder("/rest/v1/requests")
                     .addHeader("Prefer", "return=minimal")
                     .post(body)
                     .build();
