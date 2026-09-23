@@ -21,28 +21,37 @@ export const DataService = {
     return await supabase.auth.signOut();
   },
 
+  // Dynamic user and barangay lookup from public.users
   async getUserProfile(userId) {
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*, barangays(name)')
+      .from('users')
+      .select('id, email, first_name, last_name, role, barangay_id, brgy_code, barangays(barangay_name)')
       .eq('id', userId)
       .maybeSingle();
 
     if (error) {
-      console.warn("Could not fetch profile from database:", error);
+      console.warn("Could not fetch user profile from public.users:", error);
       return null;
     }
     return data;
   },
 
-  async getReports(barangayId = 1) {
-    const { data, error } = await supabase
-      .from('reports')
-      .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
-    if (error) throw error;
-    return data;
+  async getReports(brgyCode = 'BRGY-001') {
+    let query = supabase.from('reports').select('*');
+    if (typeof brgyCode === 'number') {
+      query = query.eq('barangay_id', brgyCode);
+    } else if (brgyCode) {
+      query = query.or(`brgy_code.eq.${brgyCode},barangay_id.eq.${brgyCode}`);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) {
+      // Fallback if brgy column filter is unpopulated
+      const { data: fallback, error: fbErr } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+      if (fbErr) throw fbErr;
+      return fallback || [];
+    }
+    return data || [];
   },
 
   async getReportById(id) {
@@ -64,13 +73,30 @@ export const DataService = {
     return data;
   },
 
-  async getApprovals(barangayId = 1) {
+  async getApprovals(brgyCode = 'BRGY-001') {
+    // If resident_approvals table exists, fetch from it; otherwise query unverified users
     const { data, error } = await supabase
       .from('resident_approvals')
       .select('*')
-      .eq('barangay_id', barangayId)
       .order('id', { ascending: false });
-    if (error) throw error;
+
+    if (error) {
+      const { data: unverifiedUsers, error: userErr } = await supabase
+        .from('users')
+        .select('*')
+        .eq('verification_status', 'pending');
+      if (userErr) return [];
+      return (unverifiedUsers || []).map(u => ({
+        id: u.id,
+        name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+        address: u.address || 'Address pending',
+        idType: u.id_type || 'Valid ID',
+        idNumber: u.id_number || 'N/A',
+        idPhotoUrl: u.id_photo_url,
+        date: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Recent'
+      }));
+    }
+
     return (data || []).map(a => ({
       ...a,
       name: a.full_name || a.name,
@@ -85,21 +111,23 @@ export const DataService = {
       .from('resident_approvals')
       .update({ status })
       .eq('id', id);
-    if (error) throw error;
+    if (error) {
+      // Fallback updating user directly
+      await supabase.from('users').update({ verification_status: status.toLowerCase() }).eq('id', id);
+    }
     return data;
   },
 
-  async getDocuments(barangayId = 1) {
+  async getDocuments(brgyCode = 'BRGY-001') {
     const { data, error } = await supabase
       .from('document_requests')
       .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(d => ({
       ...d,
-      name: d.resident_name || d.name,
-      type: d.document_type || d.type,
+      name: d.resident_name || d.name || 'Resident',
+      type: d.document_type || d.type || 'Barangay Document',
       pickup: d.pickup_date || d.pickup
     }));
   },
@@ -113,24 +141,26 @@ export const DataService = {
     return data;
   },
 
-  async getAnnouncements(barangayId = 1) {
-    const { data, error } = await supabase
-      .from('announcements')
-      .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
+  // Multi-tenant announcements fetch by brgy_code
+  async getAnnouncements(brgyCode) {
+    let query = supabase.from('announcements').select('*');
+    if (brgyCode) {
+      query = query.or(`brgy_code.eq.${brgyCode},barangay_id.eq.${brgyCode}`);
+    }
 
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
 
     const todayStr = new Date().toISOString().split('T')[0];
 
     return (data || []).map(a => {
       const isPastDate = a.event_date ? a.event_date < todayStr : false;
-      const isArchived = Boolean(a.is_archived || isPastDate);
+      const isArchived = Boolean((a.is_active === false) || a.is_archived || isPastDate);
 
       return {
         ...a,
-        tag: a.category || a.tag,
+        tag: a.category || a.type || 'General',
+        description: a.body || a.description || '',
         posted: a.created_at ? new Date(a.created_at).toLocaleDateString() : 'Recent',
         isArchived: isArchived,
         is_archived: isArchived
@@ -138,29 +168,39 @@ export const DataService = {
     });
   },
 
-  async createAnnouncement({ title, description, eventDate, category, barangayId = 1 }) {
+  async createAnnouncement({ title, description, body, eventDate, category, brgyCode, authorId, barangayId }) {
+    const payload = {
+      title,
+      body: body || description,
+      description: body || description,
+      event_date: eventDate || null,
+      category,
+      type: category,
+      is_active: true,
+      is_archived: false
+    };
+
+    if (brgyCode) payload.brgy_code = String(brgyCode);
+    if (barangayId) payload.barangay_id = barangayId;
+    if (authorId) payload.author_id = authorId;
+
     const { data, error } = await supabase
       .from('announcements')
-      .insert([{
-        barangay_id: barangayId,
-        title,
-        description,
-        event_date: eventDate || null,
-        category,
-        is_archived: false
-      }]);
+      .insert([payload]);
     if (error) throw error;
     return data;
   },
 
-  async updateAnnouncement(id, { title, description, eventDate, category }) {
+  async updateAnnouncement(id, { title, description, body, eventDate, category }) {
     const { data, error } = await supabase
       .from('announcements')
       .update({
         title,
-        description,
+        body: body || description,
+        description: body || description,
         event_date: eventDate || null,
-        category
+        category,
+        type: category
       })
       .eq('id', id);
     if (error) throw error;
@@ -170,7 +210,7 @@ export const DataService = {
   async archiveAnnouncement(id) {
     const { data, error } = await supabase
       .from('announcements')
-      .update({ is_archived: true })
+      .update({ is_active: false, is_archived: true })
       .eq('id', id);
     if (error) throw error;
     return data;
@@ -179,35 +219,41 @@ export const DataService = {
   async unarchiveAnnouncement(id) {
     const { data, error } = await supabase
       .from('announcements')
-      .update({ is_archived: false })
+      .update({ is_active: true, is_archived: false })
       .eq('id', id);
     if (error) throw error;
     return data;
   },
 
-  async getEmergencyContacts(barangayId = 1) {
-    const { data, error } = await supabase
-      .from('emergency_contacts')
-      .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: true });
+  async getEmergencyContacts(brgyCode) {
+    let query = supabase.from('emergency_contacts').select('*');
+    if (brgyCode) {
+      query = query.or(`brgy_code.eq.${brgyCode},barangay_id.eq.${brgyCode}`);
+    }
+
+    const { data, error } = await query.order('id', { ascending: true });
     if (error) throw error;
     return (data || []).map(c => ({
       ...c,
-      num: c.contact_number || c.num || c.number,
-      number: c.contact_number || c.num || c.number
+      num: c.phone_number || c.contact_number || c.num || c.number,
+      number: c.phone_number || c.contact_number || c.num || c.number
     }));
   },
 
-  async createEmergencyContact({ name, category, num, barangayId = 1 }) {
+  async createEmergencyContact({ name, category, num, brgyCode, barangayId = 1 }) {
+    const payload = {
+      name,
+      category,
+      scope: category,
+      phone_number: num,
+      contact_number: num
+    };
+    if (brgyCode) payload.brgy_code = String(brgyCode);
+    if (barangayId) payload.barangay_id = barangayId;
+
     const { data, error } = await supabase
       .from('emergency_contacts')
-      .insert([{
-        barangay_id: barangayId,
-        name,
-        category,
-        contact_number: num
-      }]);
+      .insert([payload]);
     if (error) throw error;
     return data;
   },
@@ -218,6 +264,8 @@ export const DataService = {
       .update({
         name,
         category,
+        scope: category,
+        phone_number: num,
         contact_number: num
       })
       .eq('id', id);

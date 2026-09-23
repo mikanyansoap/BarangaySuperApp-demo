@@ -220,17 +220,25 @@ function renderLogin() {
         throw new Error('Authentication failed. Verify your email and password.');
       }
 
-
+      // Query database dynamically from public.users
       const profile = await DataService.getUserProfile(authResult.user.id);
+      
+      const fullName = (profile?.first_name || profile?.last_name)
+        ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+        : (authResult.user.user_metadata?.full_name || email);
+
+      const assignedBrgyName = profile?.barangays?.barangay_name || 'Barangay San Isidro';
+      const assignedBrgyCode = profile?.brgy_code || profile?.barangay_id || 'BRGY-001';
 
       setActiveUser({
         id: authResult.user.id,
         email: authResult.user.email,
-        fullName: profile?.full_name || authResult.user.user_metadata?.full_name || email,
+        fullName: fullName,
         role: profile?.role || 'Barangay Official',
-        position: profile?.position || 'Official',
-        barangayId: profile?.barangay_id || 1,
-        barangayName: profile?.barangays?.name || 'Community Portal'
+        position: profile?.role || 'Official',
+        barangayId: assignedBrgyCode,
+        brgyCode: assignedBrgyCode,
+        barangayName: assignedBrgyName
       });
 
       showScreen('dashboard');
@@ -259,9 +267,9 @@ async function renderDashboard() {
     console.error('Error fetching dashboard statistics:', err);
   }
 
-  const newReports = reports.filter(q => q.status === 'pending').length;
-  const pendingDocs = docs.filter(d => d.status === 'pending').length;
-  const resolved = reports.filter(q => q.status === 'resolved').length + docs.filter(d => d.status === 'resolved').length;
+  const newReports = reports.filter(q => (q.status || '').toLowerCase() === 'pending').length;
+  const pendingDocs = docs.filter(d => (d.status || '').toLowerCase() === 'pending').length;
+  const resolved = reports.filter(q => (q.status || '').toLowerCase() === 'resolved').length + docs.filter(d => (d.status || '').toLowerCase() === 'resolved').length;
   const activeAnn = announcements.filter(a => !a.isArchived).length;
 
   const trendPoints = [
@@ -293,7 +301,7 @@ async function renderDashboard() {
     <div class="main-head">
       <div>
         <h3>Dashboard</h3>
-        <p>${dateInfo.weekday}, ${dateInfo.month} ${dateInfo.day}, ${dateInfo.year} · ${user.barangayName || 'Barangay Santo Niño'}</p>
+        <p>${dateInfo.weekday}, ${dateInfo.month} ${dateInfo.day}, ${dateInfo.year} · ${user.barangayName}</p>
       </div>
     </div>
 
@@ -331,24 +339,14 @@ async function renderDashboard() {
                 <stop offset="100%" stop-color="#0f766e" stop-opacity="0.0" />
               </linearGradient>
             </defs>
-
-            <!-- Background subtle gridlines -->
             <line x1="25" y1="30" x2="410" y2="30" stroke="#f1f5f9" stroke-width="1.5" />
             <line x1="25" y1="75" x2="410" y2="75" stroke="#f1f5f9" stroke-width="1.5" />
             <line x1="25" y1="120" x2="410" y2="120" stroke="#f1f5f9" stroke-width="1.5" />
-
-            <!-- Y Axis values -->
             <text x="12" y="34" font-size="10" fill="#94a3b8">6</text>
             <text x="12" y="79" font-size="10" fill="#94a3b8">3</text>
             <text x="12" y="124" font-size="10" fill="#94a3b8">0</text>
-
-            <!-- Fill Area under the line -->
             <path d="${areaPath}" fill="url(#lineGrad)" />
-
-            <!-- The Line -->
             <path d="${linePath}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-
-            <!-- Points and Day Labels -->
             ${coords.map(c => `
               <circle cx="${c.x}" cy="${c.y}" r="4.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
               <text x="${c.x}" y="142" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">${c.day}</text>
@@ -375,57 +373,6 @@ async function renderDashboard() {
   stage.innerHTML = shell(main, 'dashboard');
 }
 
-function renderDashboardLineChart(reports = []) {
-  const canvas = document.getElementById('dashboardLineChart');
-  if (!canvas || typeof Chart === 'line') return;
-
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 160);
-  gradient.addColorStop(0, 'rgba(15, 118, 110, 0.25)');
-  gradient.addColorStop(1, 'rgba(15, 118, 110, 0.0)');
-
-  if (window.activeDashChart) {
-    window.activeDashChart.destroy();
-  }
-
-  window.activeDashChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      datasets: [{
-        label: 'Reports Filed',
-        data: [2, 4, 3, 6, Math.max(1, reports.length), 3, 5],
-        borderColor: '#0f766e',
-        borderWidth: 2.5,
-        backgroundColor: gradient,
-        fill: true,
-        tension: 0.35,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: '#0f766e'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: '#94a3b8', font: { size: 11 } }
-        },
-        y: {
-          beginAtZero: true,
-          grid: { color: '#f1f5f9' },
-          ticks: { stepSize: 2, color: '#94a3b8', font: { size: 11 } }
-        }
-      }
-    }
-  });
-}
-
 async function renderApprovals() {
   const user = getActiveUser();
   let approvals = [];
@@ -442,16 +389,16 @@ async function renderApprovals() {
         <div class="name-cell">
           <div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('user')}</div>
           <div>
-            <div class="t">${r.name || r.full_name || 'Resident'}</div>
+            <div class="t">${r.name || 'Resident'}</div>
             <div class="s">${r.address || 'Address pending'}</div>
           </div>
         </div>
       </td>
       <td>
-        <div style="font-weight:600; color:var(--charcoal);">${r.idType || r.id_type || 'Valid ID'}</div>
-        <div class="s">${(r.idNumber || r.id_number) ? `ID No: ${r.idNumber || r.id_number}` : 'Number pending verification'}</div>
+        <div style="font-weight:600; color:var(--charcoal);">${r.idType || 'Valid ID'}</div>
+        <div class="s">${r.idNumber ? `ID No: ${r.idNumber}` : 'Number pending verification'}</div>
       </td>
-      <td>${r.date || (r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent')}</td>
+      <td>${r.date || 'Recent'}</td>
       <td style="text-align:right;color:var(--muted);">${ic('chevron')}</td>
     </tr>
   `).join('');
@@ -484,21 +431,21 @@ function openApprovalModal(record) {
       <div class="modal-box" style="width: 480px;">
         <div class="modal-head">
           <div>
-            <h4>${record.name || record.full_name}</h4>
+            <h4>${record.name}</h4>
             <span style="font-size:11px;color:var(--muted);">Resident ID Verification</span>
           </div>
           <button class="modal-close" id="approval-modal-close">✕</button>
         </div>
         
         <div class="modal-field"><span class="modal-label">Address</span><span class="modal-value">${record.address || 'Not specified'}</span></div>
-        <div class="modal-field"><span class="modal-label">ID type</span><span class="modal-value">${record.idType || record.id_type || 'Valid Government ID'}</span></div>
-        <div class="modal-field"><span class="modal-label">ID number</span><span class="modal-value">${record.idNumber || record.id_number || 'N/A'}</span></div>
+        <div class="modal-field"><span class="modal-label">ID type</span><span class="modal-value">${record.idType || 'Valid Government ID'}</span></div>
+        <div class="modal-field"><span class="modal-label">ID number</span><span class="modal-value">${record.idNumber || 'N/A'}</span></div>
         
         <div style="margin-top:14px;">
           <label class="modal-label" style="display:block; margin-bottom:6px;">Uploaded ID Photo</label>
-          ${(record.idPhotoUrl || record.id_photo_url)
+          ${record.idPhotoUrl
             ? `<div style="border:1px solid var(--sand); border-radius:6px; overflow:hidden; background:#000; text-align:center;">
-                 <img src="${record.idPhotoUrl || record.id_photo_url}" alt="Resident ID" style="max-width:100%; max-height:240px; display:inline-block; object-fit:contain;">
+                 <img src="${record.idPhotoUrl}" alt="Resident ID" style="max-width:100%; max-height:240px; display:inline-block; object-fit:contain;">
                </div>`
             : `<div class="evidence-thumb">No ID photo uploaded</div>`
           }
@@ -539,7 +486,7 @@ async function renderDocuments() {
 
   const trs = docs.map(d => {
     const rawStatus = (d.status || 'pending').toLowerCase();
-    const pickupVal = d.pickup || d.pickup_date || '';
+    const pickupVal = d.pickup || '';
 
     return `
       <tr data-doc-row="${d.id}">
@@ -547,8 +494,8 @@ async function renderDocuments() {
           <div class="name-cell">
             <div class="ic" style="background:var(--gold-100);color:var(--gold-600);">${ic('doc')}</div>
             <div>
-              <div class="t">${d.name || d.resident_name}</div>
-              <div class="s">Requested: ${d.type || d.document_type}</div>
+              <div class="t">${d.name}</div>
+              <div class="s">Requested: ${d.type}</div>
             </div>
           </div>
         </td>
@@ -651,10 +598,10 @@ async function renderQueue() {
     <tr>
       <td>
         <div class="name-cell">
-          <div class="ic" style="background:var(--${r.priority === 'high' ? 'brick-100' : 'sage-100'});color:var(--${r.priority === 'high' ? 'brick' : 'teal-800'});">${ic('queue')}</div>
+          <div class="ic" style="background:var(--${(r.priority || '').toLowerCase() === 'high' ? 'brick-100' : 'sage-100'});color:var(--${(r.priority || '').toLowerCase() === 'high' ? 'brick' : 'teal-800'});">${ic('queue')}</div>
           <div>
             <div class="t">${r.title}</div>
-            <div class="s">${r.category} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'Recent'} ${r.aiSeverityScore ? `· AI Severity: ${r.aiSeverityScore}/100` : ''}</div>
+            <div class="s">${r.category} · ${r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent'} ${r.ai_severity_score ? `· AI Severity: ${r.ai_severity_score}/100` : ''}</div>
           </div>
         </div>
       </td>
@@ -716,19 +663,19 @@ async function renderDetail(id) {
 
   if (!report) return showScreen('queue');
 
-  const aiStatusBadge = report.ai_valid === false || report.aiValid === false
+  const aiStatusBadge = report.ai_valid === false
     ? `<span class="pill" style="background:var(--brick-100);color:var(--brick);font-weight:700;">AI FLAGGED: TROLL / SPAM</span>`
     : `<span class="pill" style="background:var(--teal-100);color:var(--teal-900);font-weight:700;">AI VERIFIED GENUINE</span>`;
 
   const aiCard = `
-    <div class="panel" style="margin-top: 14px; border-left: 4px solid ${report.aiValid === false ? 'var(--brick)' : 'var(--teal-700)'};">
+    <div class="panel" style="margin-top: 14px; border-left: 4px solid ${report.ai_valid === false ? 'var(--brick)' : 'var(--teal-700)'};">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h4 style="margin:0;">Automated AI Triage</h4>
         ${aiStatusBadge}
       </div>
-      <p style="font-size: 12px; margin: 4px 0;"><b>Calculated Severity:</b> ${report.ai_severity_score ?? report.aiSeverityScore ?? 0}/100</p>
+      <p style="font-size: 12px; margin: 4px 0;"><b>Calculated Severity:</b> ${report.ai_severity_score ?? 0}/100</p>
       <p style="font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.4;">
-        <b>Assessment:</b> ${report.ai_triage_reason || report.aiTriageReason || 'AI analysis completed without flags.'}
+        <b>Assessment:</b> ${report.ai_triage_reason || 'AI analysis completed without flags.'}
       </p>
     </div>
   `;
@@ -749,7 +696,7 @@ async function renderDetail(id) {
         <div class="panel">
           <h4>Incident Details</h4>
           <p style="font-size:12.5px;line-height:1.6;margin:0;">${report.description || 'No description provided.'}</p>
-          ${report.photo_url || report.photoUrl ? `<div style="margin-top:14px;"><img src="${report.photo_url || report.photoUrl}" alt="Evidence" style="max-width:100%; border-radius:6px;"></div>` : '<div class="evidence-thumb" style="margin-top:14px;">No photo attached</div>'}
+          ${report.photo_url ? `<div style="margin-top:14px;"><img src="${report.photo_url}" alt="Evidence" style="max-width:100%; border-radius:6px;"></div>` : '<div class="evidence-thumb" style="margin-top:14px;">No photo attached</div>'}
         </div>
         ${aiCard}
       </div>
@@ -757,7 +704,7 @@ async function renderDetail(id) {
         <div class="panel">
           <h4>Triage &amp; Management</h4>
           <label class="field-label">Internal notes</label>
-          <textarea class="field" id="report-notes" style="height:76px;resize:none;">${report.internal_notes || report.internalNotes || ''}</textarea>
+          <textarea class="field" id="report-notes" style="height:76px;resize:none;">${report.internal_notes || ''}</textarea>
           <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
             <button class="btn-small" id="btn-mark-progress">Mark in progress</button>
             <button class="btn-small ghost" style="color:var(--sage);" id="btn-mark-resolved">Resolve</button>
@@ -786,7 +733,7 @@ async function renderAnnouncements() {
   let announcements = [];
 
   try {
-    announcements = await DataService.getAnnouncements(user.barangayId) || [];
+    announcements = await DataService.getAnnouncements(user.brgyCode || user.barangayId) || [];
   } catch (err) {
     console.error('Error fetching announcements:', err);
   }
@@ -794,7 +741,7 @@ async function renderAnnouncements() {
   const activeList = announcements.filter(a => !a.isArchived);
   const pastList = announcements.filter(a => a.isArchived);
 
-
+  // Month navigation calculation
   const viewYear = calendarViewDate.getFullYear();
   const viewMonth = calendarViewDate.getMonth();
   const viewMonthName = calendarViewDate.toLocaleString('en-US', { month: 'long' });
@@ -802,7 +749,7 @@ async function renderAnnouncements() {
   const realToday = new Date();
   const isCurrentMonthView = realToday.getFullYear() === viewYear && realToday.getMonth() === viewMonth;
 
-
+  // Extract scheduled event dates matching visible month
   const eventDays = new Set();
   announcements.forEach(a => {
     if (a.event_date) {
@@ -815,7 +762,7 @@ async function renderAnnouncements() {
 
   const activeItems = activeList.map(a => `
     <div class="ann-item" style="margin-bottom:12px;">
-      <div class="top"><span class="tag" style="color:var(--teal-800);background:var(--teal-100);">${a.category || a.tag || 'General'}</span></div>
+      <div class="top"><span class="tag" style="color:var(--teal-800);background:var(--teal-100);">${a.tag || 'General'}</span></div>
       <p class="title" style="margin:6px 0 2px 0;">${a.title}</p>
       ${a.description ? `<p style="font-size:12px; color:var(--muted); margin:0 0 6px 0;">${a.description}</p>` : ''}
       <p class="meta">
@@ -828,7 +775,7 @@ async function renderAnnouncements() {
 
   const pastItems = pastList.map(a => `
     <div class="ann-item" style="margin-bottom:10px; opacity:0.85; background:#fbfbfa;">
-      <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${a.category || a.tag || 'Archived'}</span></div>
+      <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${a.tag || 'Archived'}</span></div>
       <p class="title" style="margin:4px 0 2px 0; font-size:13.5px;">${a.title}</p>
       ${a.description ? `<p style="font-size:11.5px; color:var(--muted); margin:0 0 4px 0;">${a.description}</p>` : ''}
       <p class="meta">
@@ -840,7 +787,7 @@ async function renderAnnouncements() {
   `).join('');
 
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sunday
 
   const emptyLeadingDays = [...Array(firstDayOfWeek)].map(() => `<div></div>`).join('');
 
@@ -907,7 +854,6 @@ async function renderAnnouncements() {
   `;
   stage.innerHTML = shell(main, 'announcements');
 
-
   document.getElementById('cal-prev').onclick = () => {
     calendarViewDate = new Date(viewYear, viewMonth - 1, 1);
     renderAnnouncements();
@@ -951,6 +897,8 @@ async function renderAnnouncements() {
         const category = document.getElementById('ann-cat').value;
 
         await DataService.createAnnouncement({
+          brgyCode: user.brgyCode || user.barangayId,
+          authorId: user.id,
           barangayId: user.barangayId,
           title,
           description,
@@ -963,7 +911,6 @@ async function renderAnnouncements() {
     });
   };
 
-
   document.querySelectorAll('[data-archive-ann]').forEach(btn => {
     btn.onclick = async (e) => {
       e.preventDefault();
@@ -972,7 +919,6 @@ async function renderAnnouncements() {
     };
   });
 
-
   document.querySelectorAll('[data-repost-ann]').forEach(btn => {
     btn.onclick = async (e) => {
       e.preventDefault();
@@ -980,7 +926,6 @@ async function renderAnnouncements() {
       renderAnnouncements();
     };
   });
-
 
   document.querySelectorAll('[data-edit-ann]').forEach(btn => {
     btn.onclick = (e) => {
@@ -1039,7 +984,7 @@ async function renderEmergency() {
   let contacts = [];
 
   try {
-    contacts = await DataService.getEmergencyContacts(user.barangayId) || [];
+    contacts = await DataService.getEmergencyContacts(user.brgyCode || user.barangayId) || [];
   } catch (err) {
     console.error('Error fetching emergency contacts:', err);
   }
@@ -1052,8 +997,8 @@ async function renderEmergency() {
           <div class="t">${r.name}</div>
         </div>
       </td>
-      <td>${r.category || 'General'}</td>
-      <td><b>${r.contact_number || r.contactNumber || r.num || r.number || 'No number'}</b></td>
+      <td>${r.category || r.scope || 'General'}</td>
+      <td><b>${r.num || r.number || 'No number'}</b></td>
       <td>
         <div class="table-actions">
           <button class="link-btn" data-edit-em="${r.id}">Edit</button>
@@ -1104,6 +1049,7 @@ async function renderEmergency() {
         const category = document.getElementById('em-cat').value;
         const contactNumber = document.getElementById('em-num').value;
         await DataService.createEmergencyContact({
+          brgyCode: user.brgyCode || user.barangayId,
           barangayId: user.barangayId,
           name,
           category,
@@ -1130,13 +1076,13 @@ async function renderEmergency() {
           <div class="modal-form-group">
             <label>Category</label>
             <select class="field" id="em-edit-cat">
-              <option value="Barangay" ${contact.category === 'Barangay' ? 'selected' : ''}>Barangay</option>
-              <option value="National" ${contact.category === 'National' ? 'selected' : ''}>National</option>
+              <option value="Barangay" ${(contact.category || contact.scope) === 'Barangay' ? 'selected' : ''}>Barangay</option>
+              <option value="National" ${(contact.category || contact.scope) === 'National' ? 'selected' : ''}>National</option>
             </select>
           </div>
           <div class="modal-form-group">
             <label>Contact Number</label>
-            <input class="field" id="em-edit-num" value="${contact.contact_number || contact.num || ''}" required>
+            <input class="field" id="em-edit-num" value="${contact.num || ''}" required>
           </div>
         `,
         confirmText: 'Update Contact',

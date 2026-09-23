@@ -7,6 +7,7 @@ public class DocumentDtos {
 
     @Data
     public static class CreateDocumentRequest {
+        private String psgcCode; // Added dynamically
         private String requesterUid;
         private String requesterName;
         private String documentType;
