@@ -30,6 +30,8 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
 import androidx.annotation.NonNull;
 
 import org.json.JSONArray;
@@ -310,10 +312,7 @@ public class PreviewActivity extends AppCompatActivity {
             CardView btnGetCurrentLocation = findViewById(R.id.btnGetCurrentLocation);
             TextView tvLocationAddress = findViewById(R.id.tvLocationAddress);
             if (btnGetCurrentLocation != null && tvLocationAddress != null) {
-                btnGetCurrentLocation.setOnClickListener(v -> {
-                    tvLocationAddress.setText("📍 Location Pinned: Purok 3 (Lat: 14.5995, Lng: 120.9842)");
-                    Toast.makeText(this, "GPS Location Pinned successfully!", Toast.LENGTH_SHORT).show();
-                });
+                btnGetCurrentLocation.setOnClickListener(v -> showMapPickerDialog(tvLocationAddress));
             }
 
             CardView btnAddPhoto = findViewById(R.id.btnAddPhoto);
@@ -642,6 +641,14 @@ public class PreviewActivity extends AppCompatActivity {
                                 String responseBody = response.body() != null ? response.body().string() : "";
                                 runOnUiThread(() -> {
                                     if (response.isSuccessful()) {
+                                        // Save persistent session data ONLY on successful Supabase backend registration!
+                                        prefs.edit().putString("USER_NAME", constructedFullName)
+                                                    .putString("USER_PHONE", formattedPhone)
+                                                    .putString("USER_ADDRESS", fullAddress)
+                                                    .putString("USER_EMAIL", email)
+                                                    .putBoolean("IS_LOGGED_IN", true)
+                                                    .apply();
+
                                         // Also insert user directly to Supabase public.users database table!
                                         try {
                                             JSONObject json = new JSONObject(responseBody);
@@ -663,25 +670,16 @@ public class PreviewActivity extends AppCompatActivity {
                                         // Transition to Account Review notification screen
                                         Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
                                         intent.putExtra("LAYOUT_ID", R.layout.account_review_ntf);
-                                        
-                                        AutoCompleteTextView spinnerBarangay = findViewById(R.id.spinnerBarangay);
-                                        if (spinnerBarangay != null) {
-                                            String selectedBrgy = spinnerBarangay.getText().toString().trim();
-                                            if (!selectedBrgy.isEmpty()) {
-                                                intent.putExtra("SELECTED_BARANGAY", selectedBrgy);
-                                            }
-                                        }
-
                                         startActivity(intent);
                                         finish();
                                     } else {
-                                        // HANDLE SUPABASE ERRORS (e.g. Email already registered)
+                                        // HANDLE SUPABASE BACKEND REGISTRATION FAILURE - DO NOT SAVE SESSION!
                                         try {
                                             JSONObject errorJson = new JSONObject(responseBody);
-                                            String errorMsg = errorJson.optString("msg", "Unknown error occurred");
-                                            Toast.makeText(PreviewActivity.this, "Error: " + errorMsg, Toast.LENGTH_LONG).show();
+                                            String errorMsg = errorJson.optString("msg", errorJson.optString("message", errorJson.optString("error_description", "Registration rejected by server.")));
+                                            Toast.makeText(PreviewActivity.this, "Sign Up Failed: " + errorMsg, Toast.LENGTH_LONG).show();
                                         } catch (Exception ex) {
-                                            Toast.makeText(PreviewActivity.this, "Sign Up Failed", Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(PreviewActivity.this, "Sign Up Failed on Server.", Toast.LENGTH_SHORT).show();
                                         }
                                     }
                                 });
@@ -1106,9 +1104,17 @@ public class PreviewActivity extends AppCompatActivity {
             // Log Out
             if (btnLogOut != null) {
                 btnLogOut.setOnClickListener(v -> {
-                    prefs.edit().putBoolean("IS_LOGGED_IN", false).apply();
+                    prefs.edit().putBoolean("IS_LOGGED_IN", false)
+                                .remove("USER_NAME")
+                                .remove("USER_EMAIL")
+                                .remove("USER_PHONE")
+                                .remove("USER_ADDRESS")
+                                .apply();
                     Toast.makeText(this, "Logged Out Successfully", Toast.LENGTH_SHORT).show();
-                    launchPreview(R.layout.sign_in);
+                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                    intent.putExtra("LAYOUT_ID", R.layout.sign_in);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
                     finish();
                 });
             }
@@ -1766,6 +1772,79 @@ public class PreviewActivity extends AppCompatActivity {
         } catch (Exception e) {
             Toast.makeText(this, "Unable to open phone dialer", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private double selectedLat = 14.5995;
+    private double selectedLng = 120.9842;
+    private String selectedLocationAddress = "📍 Pinned: Lat 14.5995, Lng 120.9842";
+
+    private void showMapPickerDialog(TextView targetLocationTextView) {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_map_picker, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(dialogView);
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        WebView wvMap = dialogView.findViewById(R.id.wvMapPicker);
+        TextView tvAddress = dialogView.findViewById(R.id.tvMapAddressDisplay);
+        CardView btnGps = dialogView.findViewById(R.id.btnGpsLiveLocation);
+        CardView btnConfirm = dialogView.findViewById(R.id.btnConfirmMapLocation);
+        TextView btnCancel = dialogView.findViewById(R.id.btnCancelMapLocation);
+
+        if (wvMap != null) {
+            wvMap.getSettings().setJavaScriptEnabled(true);
+            wvMap.addJavascriptInterface(new Object() {
+                @JavascriptInterface
+                public void onLocationPinned(double lat, double lng) {
+                    runOnUiThread(() -> {
+                        selectedLat = lat;
+                        selectedLng = lng;
+                        selectedLocationAddress = String.format(Locale.US, "📍 Pinned: Lat %.4f, Lng %.4f", lat, lng);
+                        if (tvAddress != null) {
+                            tvAddress.setText(selectedLocationAddress);
+                        }
+                    });
+                }
+            }, "AndroidMapBridge");
+
+            String htmlMap = "<!DOCTYPE html><html><head>" +
+                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\" />" +
+                    "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />" +
+                    "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>" +
+                    "<style>body,html,#map{margin:0;padding:0;height:100%;width:100%;}</style></head><body>" +
+                    "<div id=\"map\"></div><script>" +
+                    "var map = L.map('map').setView([14.5995, 120.9842], 15);" +
+                    "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);" +
+                    "var marker = L.marker([14.5995, 120.9842], {draggable: true}).addTo(map);" +
+                    "function updateLoc(lat, lng) { if(window.AndroidMapBridge) window.AndroidMapBridge.onLocationPinned(lat, lng); }" +
+                    "marker.on('dragend', function(e){ var pos = marker.getLatLng(); updateLoc(pos.lat, pos.lng); });" +
+                    "map.on('click', function(e){ marker.setLatLng(e.latlng); updateLoc(e.latlng.lat, e.latlng.lng); });" +
+                    "function setGps(lat, lng){ map.setView([lat, lng], 17); marker.setLatLng([lat, lng]); updateLoc(lat, lng); }" +
+                    "</script></body></html>";
+
+            wvMap.loadDataWithBaseURL("https://openstreetmap.org", htmlMap, "text/html", "UTF-8", null);
+        }
+
+        if (btnGps != null && wvMap != null) {
+            btnGps.setOnClickListener(v -> {
+                wvMap.evaluateJavascript("setGps(14.5995, 120.9842);", null);
+                Toast.makeText(this, "Acquired Live GPS Location!", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v -> {
+                if (targetLocationTextView != null) {
+                    targetLocationTextView.setText(selectedLocationAddress);
+                }
+                Toast.makeText(this, "Location Pinned!", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            });
+        }
+
+        dialog.show();
     }
 
     private void launchPreview(int layoutId) {
