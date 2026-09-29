@@ -167,4 +167,18 @@ public class SupabaseClient {
             e.printStackTrace();
         }
     }
+
+    // Fetches announcements from Supabase REST API filtered by PSGC Code
+    public static void fetchAnnouncementsFromSupabase(String psgcCode, Callback callback) {
+        try {
+            String endpoint = "/rest/v1/announcements?select=*&order=created_at.desc";
+            if (psgcCode != null && !psgcCode.isEmpty()) {
+                endpoint = "/rest/v1/announcements?select=*&or=(psgc_code.eq." + psgcCode + ",psgc_code.is.null)&order=created_at.desc";
+            }
+            Request request = getAuthenticatedBuilder(endpoint).get().build();
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }

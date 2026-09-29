@@ -188,11 +188,11 @@
                     android:focusable="false" />
             </androidx.cardview.widget.CardView>
 
-            <!-- Editable: Address -->
+            <!-- Editable: Complete Address Section -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Address / Location"
+                android:text="House No. / Street / Building"
                 android:textColor="#2A3532"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -200,20 +200,134 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="6dp"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="12dp"
                 app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="0dp">
                 <EditText
-                    android:id="@+id/etProfileAddress"
+                    android:id="@+id/etProfileHouseStreet"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:background="@android:color/transparent"
-                    android:hint="House no., street, barangay, city"
+                    android:hint="e.g. 123 Rizal St., Purok 2"
                     android:paddingHorizontal="16dp"
                     android:textColor="#11231D"
-                    android:textSize="16sp"
-                    android:inputType="text" />
+                    android:textSize="15sp"
+                    android:inputType="textPostalAddress" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- Region / Province Dropdown -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Region / Province"
+                android:textColor="#2A3532"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp">
+                <AutoCompleteTextView
+                    android:id="@+id/spinnerProfileProvince"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@android:color/transparent"
+                    android:paddingHorizontal="12dp"
+                    android:hint="Select region or province..."
+                    android:textColor="#11231D"
+                    android:textColorHint="#AAB3AE"
+                    android:textSize="15sp"
+                    android:completionThreshold="1"
+                    android:inputType="textNoSuggestions" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end|center_vertical"
+                    android:paddingEnd="16dp"
+                    android:text="▼"
+                    android:textColor="#2A3532"
+                    android:textSize="12sp" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- City / Municipality Dropdown -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="City / Municipality"
+                android:textColor="#2A3532"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp">
+                <AutoCompleteTextView
+                    android:id="@+id/spinnerProfileCity"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@android:color/transparent"
+                    android:paddingHorizontal="12dp"
+                    android:hint="Select city or municipality..."
+                    android:textColor="#11231D"
+                    android:textColorHint="#AAB3AE"
+                    android:textSize="15sp"
+                    android:completionThreshold="1"
+                    android:inputType="textNoSuggestions" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end|center_vertical"
+                    android:paddingEnd="16dp"
+                    android:text="▼"
+                    android:textColor="#2A3532"
+                    android:textSize="12sp" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- Barangay Dropdown -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Barangay"
+                android:textColor="#2A3532"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp">
+                <AutoCompleteTextView
+                    android:id="@+id/spinnerProfileBarangay"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@android:color/transparent"
+                    android:paddingHorizontal="12dp"
+                    android:hint="Select barangay..."
+                    android:textColor="#11231D"
+                    android:textColorHint="#AAB3AE"
+                    android:textSize="15sp"
+                    android:completionThreshold="1"
+                    android:inputType="textNoSuggestions" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end|center_vertical"
+                    android:paddingEnd="16dp"
+                    android:text="▼"
+                    android:textColor="#2A3532"
+                    android:textSize="12sp" />
             </androidx.cardview.widget.CardView>
 
             <!-- Save Changes Button -->
