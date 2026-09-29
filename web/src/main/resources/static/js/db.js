@@ -6,8 +6,11 @@ const SUPABASE_ANON_KEY = 'sb_publishable_eKmPItxbga4MB9Rn2JuMJw_04jCCvGE';
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const REPORT_CATEGORIES = ['complaint', 'disaster', 'incident', 'emergency', 'report'];
-const isReport = (r) => REPORT_CATEGORIES.includes(String(r.category || '').trim().toLowerCase());
 
+const isReport = (r) => {
+  const recordType = String(r.category || r.item_type || r.type || '').trim().toLowerCase();
+  return REPORT_CATEGORIES.includes(recordType);
+};
 
 async function updateRequest(id, updates) {
   const { data, error } = await supabase
