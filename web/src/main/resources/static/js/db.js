@@ -5,13 +5,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_eKmPItxbga4MB9Rn2JuMJw_04jCCvGE';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const REPORT_CATEGORIES = ['complaint', 'disaster', 'incident', 'emergency', 'report'];
-
-const isReport = (r) => {
-  const recordType = String(r.category || r.item_type || r.type || '').trim().toLowerCase();
-  return REPORT_CATEGORIES.includes(recordType);
-};
-
+// Helper for updating document requests
 async function updateRequest(id, updates) {
   const { data, error } = await supabase
     .from('requests')
@@ -25,14 +19,18 @@ async function updateRequest(id, updates) {
   return data;
 }
 
-async function getRequestsFor(psgcCode) {
+// Helper for updating incident/complaint reports
+async function updateReportRecord(id, updates) {
   const { data, error } = await supabase
-    .from('requests')
-    .select('*')
-    .eq('psgc_code', psgcCode)
-    .order('created_at', { ascending: false });
+    .from('reports')
+    .update(updates)
+    .eq('id', id)
+    .select();
   if (error) throw error;
-  return data || [];
+  if (!data || data.length === 0) {
+    throw new Error('Update changed 0 rows. Check the RLS UPDATE policy on public.reports.');
+  }
+  return data;
 }
 
 export const DataService = {
@@ -65,13 +63,21 @@ export const DataService = {
     return data;
   },
 
-  async getReports(psgcCode = 'BRGY-001') {
-    return (await getRequestsFor(psgcCode)).filter(isReport);
+  // REPORTS (Incidents & Complaints) - Now fetching from 'reports' table
+  async getReports(psgcCode) {
+    if (!psgcCode) throw new Error("psgcCode is required to fetch reports");
+    const { data, error } = await supabase
+      .from('reports')
+      .select('*')
+      .eq('psgc_code', psgcCode)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   },
 
   async getReportById(id) {
     const { data, error } = await supabase
-      .from('requests')
+      .from('reports')
       .select('*')
       .eq('id', id)
       .single();
@@ -82,10 +88,49 @@ export const DataService = {
   async updateReport(id, updates) {
     const { internal_notes, ...rest } = updates;
     const payload = internal_notes !== undefined ? { ...rest, admin_remarks: internal_notes } : rest;
-    return updateRequest(id, payload);
+    return updateReportRecord(id, payload);
   },
 
-  async getApprovals(psgcCode = 'BRGY-001') {
+  // DOCUMENTS - Now fetching exclusively from 'requests' table
+  async getDocuments(psgcCode) {
+    if (!psgcCode) throw new Error("psgcCode is required to fetch documents");
+
+    const { data: rows, error: reqError } = await supabase
+      .from('requests')
+      .select('*')
+      .eq('psgc_code', psgcCode)
+      .order('created_at', { ascending: false });
+      
+    if (reqError) throw reqError;
+
+    const ids = [...new Set((rows || []).map(r => r.user_id).filter(Boolean))];
+    const names = {};
+    if (ids.length) {
+      const { data: profs, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', ids);
+      if (error) console.warn('Could not load requester names:', error);
+      (profs || []).forEach(p => {
+        names[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
+      });
+    }
+
+    return (rows || []).map(d => ({
+      ...d,
+      name: names[d.user_id] || 'Resident',
+      type: d.item_type || d.title || d.category || 'Barangay Document',
+      pickup: d.pickup_date || ''
+    }));
+  },
+
+  async updateDocument(id, updates) {
+    return updateRequest(id, updates);
+  },
+
+  // ACCOUNT APPROVALS
+  async getApprovals(psgcCode) {
+    if (!psgcCode) throw new Error("psgcCode is required to fetch approvals");
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -114,35 +159,9 @@ export const DataService = {
     return data;
   },
 
-  async getDocuments(psgcCode = 'BRGY-001') {
-    const rows = (await getRequestsFor(psgcCode)).filter(r => !isReport(r));
-
-    const ids = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
-    const names = {};
-    if (ids.length) {
-      const { data: profs, error } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, email')
-        .in('id', ids);
-      if (error) console.warn('Could not load requester names:', error);
-      (profs || []).forEach(p => {
-        names[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
-      });
-    }
-
-    return rows.map(d => ({
-      ...d,
-      name: names[d.user_id] || 'Resident',
-      type: d.item_type || d.title || d.category || 'Barangay Document',
-      pickup: d.pickup_date || ''
-    }));
-  },
-
-  async updateDocument(id, updates) {
-    return updateRequest(id, updates);
-  },
-
-  async getAnnouncements(psgcCode = 'BRGY-001') {
+  // ANNOUNCEMENTS
+  async getAnnouncements(psgcCode) {
+    if (!psgcCode) throw new Error("psgcCode is required to fetch announcements");
     const { data, error } = await supabase
       .from('announcements')
       .select('*')
@@ -217,7 +236,9 @@ export const DataService = {
     return data;
   },
 
-  async getEmergencyContacts(psgcCode = 'BRGY-001') {
+  // EMERGENCY CONTACTS
+  async getEmergencyContacts(psgcCode) {
+    if (!psgcCode) throw new Error("psgcCode is required to fetch emergency contacts");
     const { data, error } = await supabase
       .from('emergency_contacts')
       .select('*')
@@ -231,7 +252,7 @@ export const DataService = {
     }));
   },
 
-async createEmergencyContact({ name, category, num, psgcCode }) {
+  async createEmergencyContact({ name, category, num, psgcCode }) {
     const payload = {
       name: name,
       scope: category,       

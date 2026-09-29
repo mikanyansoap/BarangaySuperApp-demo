@@ -2,6 +2,22 @@ import { DataService } from './db.js';
 
 let calendarViewDate = new Date();
 
+
+async function loadLeaflet() {
+  if (window.L) return;
+  return new Promise(res => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = res;
+    document.head.appendChild(script);
+  });
+}
+
 const getCurrentDate = () => {
   const now = new Date();
   return {
@@ -226,8 +242,12 @@ function renderLogin() {
         ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
         : (authResult.user.user_metadata?.full_name || email);
 
-      const assignedBrgyName = profile?.barangays?.name || 'Barangay San Isidro';
-      const assignedPsgcCode = profile?.psgc_code || 'BRGY-001';
+      const assignedPsgcCode = profile?.psgc_code;
+      if (!assignedPsgcCode) {
+        throw new Error('No assigned barangay code (psgc_code) found for this official. Please contact the administrator.');
+      }
+
+      const assignedBrgyName = profile?.barangays?.name || 'Unknown Barangay';
 
       setActiveUser({
         id: authResult.user.id,
@@ -265,35 +285,66 @@ async function renderDashboard() {
     console.error('Error fetching dashboard statistics:', err);
   }
 
+  const incidentsList = reports.filter(r => r.category === 'Incident');
+  const complaintsList = reports.filter(r => r.category === 'Complaint');
   const newReports = reports.filter(q => (q.status || '').toLowerCase() === 'pending').length;
   const pendingDocs = docs.filter(d => (d.status || '').toLowerCase() === 'pending').length;
   const resolved = reports.filter(q => (q.status || '').toLowerCase() === 'resolved').length + docs.filter(d => (d.status || '').toLowerCase() === 'resolved').length;
   const activeAnn = announcements.filter(a => !a.isArchived).length;
 
-  const trendPoints = [
-    { day: 'Mon', val: 2 },
-    { day: 'Tue', val: 4 },
-    { day: 'Wed', val: 3 },
-    { day: 'Thu', val: 6 },
-    { day: 'Fri', val: Math.max(2, reports.length) },
-    { day: 'Sat', val: 3 },
-    { day: 'Sun', val: 5 }
+  // Generate distinct mock trends based on the separated actual counts
+  const trendPointsInc = [
+    { day: 'Mon', val: 1 }, { day: 'Tue', val: 3 }, { day: 'Wed', val: 2 },
+    { day: 'Thu', val: 4 }, { day: 'Fri', val: Math.max(1, incidentsList.length) },
+    { day: 'Sat', val: 1 }, { day: 'Sun', val: 2 }
   ];
 
-  const maxVal = 8;
-  const chartHeight = 110;
-  const chartWidth = 400;
-  const startX = 30;
-  const stepX = (chartWidth - startX) / (trendPoints.length - 1);
+  const trendPointsCom = [
+    { day: 'Mon', val: 2 }, { day: 'Tue', val: 1 }, { day: 'Wed', val: 4 },
+    { day: 'Thu', val: 2 }, { day: 'Fri', val: Math.max(1, complaintsList.length) },
+    { day: 'Sat', val: 3 }, { day: 'Sun', val: 4 }
+  ];
 
-  const coords = trendPoints.map((p, i) => {
-    const x = startX + (i * stepX);
-    const y = chartHeight - (p.val / maxVal * (chartHeight - 20)) + 10;
-    return { x, y, ...p };
-  });
+  const generateLineChart = (points, strokeColor) => {
+    const maxVal = 8;
+    const chartHeight = 110;
+    const chartWidth = 400;
+    const startX = 30;
+    const stepX = (chartWidth - startX) / (points.length - 1);
 
-  const linePath = coords.map((c, i) => (i === 0 ? `M ${c.x} ${c.y}` : `L ${c.x} ${c.y}`)).join(' ');
-  const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${chartHeight + 15} L ${coords[0].x} ${chartHeight + 15} Z`;
+    const coords = points.map((p, i) => ({
+      x: startX + (i * stepX),
+      y: chartHeight - (p.val / maxVal * (chartHeight - 20)) + 10,
+      ...p
+    }));
+
+    const linePath = coords.map((c, i) => (i === 0 ? `M ${c.x} ${c.y}` : `L ${c.x} ${c.y}`)).join(' ');
+    const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${chartHeight + 15} L ${coords[0].x} ${chartHeight + 15} Z`;
+    const gradId = 'grad-' + Math.floor(Math.random() * 100000);
+
+    return `
+      <svg viewBox="0 0 420 155" style="width:100%; height:auto; overflow:visible;">
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.28" />
+            <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0" />
+          </linearGradient>
+        </defs>
+        <line x1="25" y1="30" x2="410" y2="30" stroke="#f1f5f9" stroke-width="1.5" />
+        <line x1="25" y1="75" x2="410" y2="75" stroke="#f1f5f9" stroke-width="1.5" />
+        <line x1="25" y1="120" x2="410" y2="120" stroke="#f1f5f9" stroke-width="1.5" />
+        <text x="12" y="34" font-size="10" fill="#94a3b8">6</text>
+        <text x="12" y="79" font-size="10" fill="#94a3b8">3</text>
+        <text x="12" y="124" font-size="10" fill="#94a3b8">0</text>
+        <path d="${areaPath}" fill="url(#${gradId})" />
+        <path d="${linePath}" fill="none" stroke="${strokeColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        ${coords.map(c => `
+          <circle cx="${c.x}" cy="${c.y}" r="4.5" fill="${strokeColor}" stroke="#ffffff" stroke-width="2" />
+          <text x="${c.x}" y="142" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">${c.day}</text>
+        `).join('')}
+      </svg>
+    `;
+  };
 
   const main = `
     <div class="main-head">
@@ -326,44 +377,31 @@ async function renderDashboard() {
       </div>
     </div>
 
-    <div class="chart-row">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
       <div class="panel" style="display:flex; flex-direction:column;">
-        <h4>Incidents &amp; Complaints Trend</h4>
-        <div style="flex:1; width:100%; margin-top:8px;">
-          <svg viewBox="0 0 420 155" style="width:100%; height:auto; overflow:visible;">
-            <defs>
-              <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#0f766e" stop-opacity="0.28" />
-                <stop offset="100%" stop-color="#0f766e" stop-opacity="0.0" />
-              </linearGradient>
-            </defs>
-            <line x1="25" y1="30" x2="410" y2="30" stroke="#f1f5f9" stroke-width="1.5" />
-            <line x1="25" y1="75" x2="410" y2="75" stroke="#f1f5f9" stroke-width="1.5" />
-            <line x1="25" y1="120" x2="410" y2="120" stroke="#f1f5f9" stroke-width="1.5" />
-            <text x="12" y="34" font-size="10" fill="#94a3b8">6</text>
-            <text x="12" y="79" font-size="10" fill="#94a3b8">3</text>
-            <text x="12" y="124" font-size="10" fill="#94a3b8">0</text>
-            <path d="${areaPath}" fill="url(#lineGrad)" />
-            <path d="${linePath}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-            ${coords.map(c => `
-              <circle cx="${c.x}" cy="${c.y}" r="4.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
-              <text x="${c.x}" y="142" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">${c.day}</text>
-            `).join('')}
-          </svg>
+        <h4>Incidents Trend</h4>
+        <div style="flex:1; width:100%; margin-top:14px;">
+          ${generateLineChart(trendPointsInc, '#C1483A')}
         </div>
       </div>
+      <div class="panel" style="display:flex; flex-direction:column;">
+        <h4>Complaints Trend</h4>
+        <div style="flex:1; width:100%; margin-top:14px;">
+          ${generateLineChart(trendPointsCom, '#D97706')}
+        </div>
+      </div>
+    </div>
 
-      <div class="panel">
-        <h4>Current Operational Breakdown</h4>
-        <div class="donut-row">
-          <svg width="88" height="88" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#E7E9E1" stroke-width="4"/>
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#C1483A" stroke-width="4" stroke-dasharray="${Math.max(5, newReports * 12)} 97" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
-          </svg>
-          <div class="legend">
-            <div class="li"><span class="sw" style="background:#C1483A;"></span>Pending Review (${newReports})</div>
-            <div class="li"><span class="sw" style="background:#5C8A72;"></span>Resolved (${resolved})</div>
-          </div>
+    <div class="panel" style="max-width:400px;">
+      <h4>Current Operational Breakdown</h4>
+      <div class="donut-row">
+        <svg width="88" height="88" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke="#E7E9E1" stroke-width="4"/>
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke="#C1483A" stroke-width="4" stroke-dasharray="${Math.max(5, newReports * 12)} 97" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
+        </svg>
+        <div class="legend">
+          <div class="li"><span class="sw" style="background:#C1483A;"></span>Pending Review (${newReports})</div>
+          <div class="li"><span class="sw" style="background:#5C8A72;"></span>Resolved (${resolved})</div>
         </div>
       </div>
     </div>
@@ -620,13 +658,14 @@ async function renderQueue() {
         <p>Live municipal concerns submitted by residents.</p>
       </div>
     </div>
+    
+    <div id="reports-map" style="width: 100%; height: 280px; border-radius: 8px; margin-bottom: 20px; background: #e2e8f0; border: 1px solid var(--sand); overflow: hidden;"></div>
+
     <div class="filters">
       <select id="queue-cat-filter">
         <option value="">All categories</option>
-        <option value="Disturbance" ${cat === 'Disturbance' ? 'selected' : ''}>Disturbance</option>
-        <option value="Drainage" ${cat === 'Drainage' ? 'selected' : ''}>Drainage</option>
-        <option value="Sanitation" ${cat === 'Sanitation' ? 'selected' : ''}>Sanitation</option>
-        <option value="Disaster" ${cat === 'Disaster' ? 'selected' : ''}>Disaster</option>
+        <option value="Incident" ${cat === 'Incident' ? 'selected' : ''}>Incident</option>
+        <option value="Complaint" ${cat === 'Complaint' ? 'selected' : ''}>Complaint</option>
       </select>
       <select id="queue-stat-filter">
         <option value="">All statuses</option>
@@ -649,6 +688,34 @@ async function renderQueue() {
   document.querySelectorAll('[data-view-report]').forEach(btn => {
     btn.onclick = () => showScreen('detail', btn.dataset.viewReport);
   });
+
+  // Inject Leaflet API & initialize CARTO map
+  await loadLeaflet();
+  const mapEl = document.getElementById('reports-map');
+  if (mapEl && window.L) {
+    const map = L.map('reports-map').setView([14.1673, 121.2433], 14); // Centered on Los Baños
+    
+    // Inject CARTO Voyager layer using the user's provided API key
+    L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_42nw_1_c5daf23a0f9ab0a9354a9996', {
+      attribution: '&copy; OpenStreetMap, &copy; CARTO',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Plot dynamic dummy coordinates strictly for the *currently filtered* reports
+    list.forEach((r, i) => {
+      const lat = 14.1673 + (Math.sin(i * 1.5) * 0.007);
+      const lng = 121.2433 + (Math.cos(i * 1.5) * 0.007);
+      
+      const isIncident = (r.category || '').toLowerCase() === 'incident';
+      const color = isIncident ? '#C1483A' : '#D97706'; // Match the UI's Brick and Gold colors
+      
+      const markerHtml = `<div style="background-color: ${color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4);"></div>`;
+      const icon = L.divIcon({ html: markerHtml, className: '', iconSize: [14, 14] });
+      
+      L.marker([lat, lng], { icon }).addTo(map)
+        .bindPopup(`<b style="font-size:12px;">${r.title}</b><br><span style="font-size:11px;color:#666;">${r.category} · ${r.status}</span>`);
+    });
+  }
 }
 
 async function renderDetail(id) {
