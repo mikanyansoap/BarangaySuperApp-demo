@@ -2,6 +2,7 @@ package com.barangay.portal.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -9,6 +10,7 @@ import java.util.UUID;
 @Table(name = "profiles", schema = "public")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Profile {
+
     @Id
     private UUID id;
 
@@ -30,6 +32,9 @@ public class Profile {
     private String lastName;
 
     private String suffix;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate; // Added Date of Birth field
 
     @Column(name = "mobile_number")
     private String mobileNumber;
@@ -53,4 +58,7 @@ public class Profile {
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
 }

@@ -7,16 +7,15 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "document_requests")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class DocumentRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "psgc_code", nullable = false)
+    private String psgcCode;
 
     private String requesterUid; 
     private String requesterName;

@@ -20,14 +20,16 @@ public class DocuReqController {
         this.repository = repository;
     }
 
+    // Dynamically fetches document requests for whichever barangay's code is passed
     @GetMapping
-    public List<DocumentRequest> getAllRequests() {
-        return repository.findAllByOrderByRequestedAtDesc();
+    public List<DocumentRequest> getRequestsByBarangay(@RequestParam String psgcCode) {
+        return repository.findByPsgcCodeOrderByRequestedAtDesc(psgcCode);
     }
 
     @PostMapping
     public ResponseEntity<DocumentRequest> submitRequest(@RequestBody CreateDocumentRequest req) {
         DocumentRequest doc = DocumentRequest.builder()
+            .psgcCode(req.getPsgcCode())
             .requesterUid(req.getRequesterUid())
             .requesterName(req.getRequesterName())
             .documentType(req.getDocumentType())
