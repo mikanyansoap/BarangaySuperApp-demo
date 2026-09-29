@@ -45,6 +45,7 @@ import androidx.annotation.NonNull;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -75,6 +76,23 @@ public class PreviewActivity extends AppCompatActivity {
     private final List<JSONObject> allAnnouncements = new ArrayList<>();
     
     private TextView currentUploadTextView;
+
+    private byte[] readBytesFromUri(Uri uri) {
+        if (uri == null) return null;
+        try (InputStream is = getContentResolver().openInputStream(uri);
+             ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream()) {
+            if (is == null) return null;
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = is.read(buffer)) != -1) {
+                byteBuffer.write(buffer, 0, len);
+            }
+            return byteBuffer.toByteArray();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
 
     private long getFileSize(Uri uri) {
         if (uri == null) return 0;
@@ -132,7 +150,7 @@ public class PreviewActivity extends AppCompatActivity {
                             currentUploadTextView.setText("File Selected: " + selectedFileUri.getLastPathSegment());
                             currentUploadTextView.setTextColor(Color.parseColor("#1B5E20")); // Green text for success
                         } else {
-                            // Update Profile Picture using persistent internal file storage to prevent crashes
+                            // Update Profile Picture using persistent internal file storage AND Supabase Storage!
                             String localPath = saveProfileImageLocally(selectedFileUri);
                             if (localPath != null) {
                                 SharedPreferences prefs = getSharedPreferences("AppSession", MODE_PRIVATE);
@@ -141,15 +159,36 @@ public class PreviewActivity extends AppCompatActivity {
                                 Bitmap bitmap = BitmapFactory.decodeFile(localPath);
                                 if (bitmap != null) {
                                     ImageView ivProfileImage = findViewById(R.id.ivProfileImage);
-                                    if (ivProfileImage != null) {
-                                        ivProfileImage.setImageBitmap(bitmap);
-                                    }
+                                    if (ivProfileImage != null) ivProfileImage.setImageBitmap(bitmap);
                                     ImageView ivHeaderProfileImage = findViewById(R.id.ivHeaderProfileImage);
-                                    if (ivHeaderProfileImage != null) {
-                                        ivHeaderProfileImage.setImageBitmap(bitmap);
-                                    }
+                                    if (ivHeaderProfileImage != null) ivHeaderProfileImage.setImageBitmap(bitmap);
                                 }
-                                Toast.makeText(this, "Profile Picture Updated!", Toast.LENGTH_SHORT).show();
+
+                                byte[] imageBytes = readBytesFromUri(selectedFileUri);
+                                if (imageBytes != null && imageBytes.length > 0) {
+                                    String fileName = "avatar_" + System.currentTimeMillis() + ".jpg";
+                                    SupabaseClient.uploadToStorageBucket("avatars", fileName, imageBytes, "image/jpeg", new SupabaseClient.StorageUploadCallback() {
+                                        @Override
+                                        public void onSuccess(String publicUrl) {
+                                            runOnUiThread(() -> {
+                                                prefs.edit().putString("USER_AVATAR_URL", publicUrl).apply();
+                                                String userId = prefs.getString("USER_ID", "");
+                                                if (!userId.isEmpty()) {
+                                                    SupabaseClient.updateUserProfilePhoto(userId, publicUrl, new Callback() {
+                                                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                                                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                                                    });
+                                                }
+                                                Toast.makeText(PreviewActivity.this, "Profile Picture Uploaded to Supabase Storage!", Toast.LENGTH_SHORT).show();
+                                            });
+                                        }
+
+                                        @Override
+                                        public void onError(String error) {
+                                            runOnUiThread(() -> Toast.makeText(PreviewActivity.this, "Storage Upload: " + error, Toast.LENGTH_SHORT).show());
+                                        }
+                                    });
+                                }
                             } else {
                                 Toast.makeText(this, "Failed to update profile picture", Toast.LENGTH_SHORT).show();
                             }
@@ -2039,7 +2078,7 @@ public class PreviewActivity extends AppCompatActivity {
                     "<style>html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#e5e3df;}</style></head><body>" +
                     "<div id=\"map\"></div><script>" +
                     "var map = L.map('map', {zoomControl: true}).setView([14.5995, 120.9842], 15);" +
-                    "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: 'OpenStreetMap'}).addTo(map);" +
+                    "L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {maxZoom: 19, attribution: 'CartoDB'}).addTo(map);" +
                     "var marker = L.marker([14.5995, 120.9842], {draggable: true}).addTo(map);" +
                     "function updateLoc(lat, lng) { if(window.AndroidMapBridge) window.AndroidMapBridge.onLocationPinned(lat, lng); }" +
                     "marker.on('dragend', function(e){ var pos = marker.getLatLng(); updateLoc(pos.lat, pos.lng); });" +
@@ -2050,7 +2089,7 @@ public class PreviewActivity extends AppCompatActivity {
                     "window.onload = function(){ setTimeout(function(){ map.invalidateSize(); }, 500); };" +
                     "</script></body></html>";
 
-            wvMap.loadDataWithBaseURL("https://openstreetmap.org", htmlMap, "text/html", "UTF-8", null);
+            wvMap.loadDataWithBaseURL("https://cartocdn.com", htmlMap, "text/html", "UTF-8", null);
         }
 
         if (btnGps != null && wvMap != null) {

@@ -6,8 +6,10 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.Locale;
 
 public class SupabaseClient {
@@ -24,6 +26,59 @@ public class SupabaseClient {
                 .addHeader("apikey", SUPABASE_PUBLIC_KEY)
                 .addHeader("Authorization", "Bearer " + SUPABASE_PUBLIC_KEY)
                 .addHeader("Content-Type", "application/json");
+    }
+
+    public interface StorageUploadCallback {
+        void onSuccess(String publicUrl);
+        void onError(String error);
+    }
+
+    // Uploads file bytes directly to Supabase Storage Bucket and returns public URL
+    public static void uploadToStorageBucket(String bucketName, String fileName, byte[] fileBytes, String mimeType, StorageUploadCallback callback) {
+        try {
+            String endpoint = "/storage/v1/object/" + bucketName + "/" + fileName;
+            RequestBody body = RequestBody.create(fileBytes, MediaType.parse(mimeType != null ? mimeType : "image/jpeg"));
+
+            Request request = new Request.Builder()
+                    .url(SUPABASE_URL + endpoint)
+                    .addHeader("apikey", SUPABASE_PUBLIC_KEY)
+                    .addHeader("Authorization", "Bearer " + SUPABASE_PUBLIC_KEY)
+                    .addHeader("x-upsert", "true")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    callback.onError(e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    String publicUrl = SUPABASE_URL + "/storage/v1/object/public/" + bucketName + "/" + fileName;
+                    callback.onSuccess(publicUrl);
+                }
+            });
+        } catch (Exception e) {
+            callback.onError(e.getMessage());
+        }
+    }
+
+    // Updates id_photo_url in public.users table
+    public static void updateUserProfilePhoto(String userId, String publicPhotoUrl, Callback callback) {
+        try {
+            JSONObject bodyJson = new JSONObject();
+            bodyJson.put("id_photo_url", publicPhotoUrl);
+
+            RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = getAuthenticatedBuilder("/rest/v1/users?id=eq." + userId)
+                    .patch(body)
+                    .build();
+
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // Converts MM/DD/YYYY to YYYY-MM-DD for PostgreSQL DATE column
