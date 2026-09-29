@@ -24,30 +24,31 @@ export const DataService = {
   async getUserProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*, barangays(name)')
+      .select('id, email, first_name, last_name, role, psgc_code, barangays(name)')
       .eq('id', userId)
       .maybeSingle();
 
     if (error) {
-      console.warn("Could not fetch profile from database:", error);
+      console.warn("Could not fetch user profile from public.profiles:", error);
       return null;
     }
     return data;
   },
 
-  async getReports(barangayId = 1) {
+  async getReports(psgcCode = 'BRGY-001') {
     const { data, error } = await supabase
-      .from('reports')
+      .from('requests')
       .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
+      .eq('psgc_code', psgcCode)
+      .order('created_at', { ascending: false });
+
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
   async getReportById(id) {
     const { data, error } = await supabase
-      .from('reports')
+      .from('requests')
       .select('*')
       .eq('id', id)
       .single();
@@ -57,69 +58,72 @@ export const DataService = {
 
   async updateReport(id, updates) {
     const { data, error } = await supabase
-      .from('reports')
+      .from('requests')
       .update(updates)
       .eq('id', id);
     if (error) throw error;
     return data;
   },
 
-  async getApprovals(barangayId = 1) {
+  async getApprovals(psgcCode = 'BRGY-001') {
     const { data, error } = await supabase
-      .from('resident_approvals')
+      .from('profiles')
       .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
+      .eq('psgc_code', psgcCode)
+      .eq('account_status', 'pending')
+      .order('created_at', { ascending: false });
+
     if (error) throw error;
-    return (data || []).map(a => ({
-      ...a,
-      name: a.full_name || a.name,
-      idType: a.id_type || a.idType,
-      idNumber: a.id_number || a.idNumber,
-      date: a.date || 'Recent'
+    return (data || []).map(u => ({
+      id: u.id,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+      address: u.current_address || 'Address pending',
+      idType: u.id_type || 'Valid ID',
+      idNumber: u.id_number || 'N/A',
+      idPhotoUrl: u.id_photo_url,
+      date: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Recent'
     }));
   },
 
   async updateApprovalStatus(id, status) {
     const { data, error } = await supabase
-      .from('resident_approvals')
-      .update({ status })
+      .from('profiles')
+      .update({ account_status: status.toLowerCase() })
       .eq('id', id);
     if (error) throw error;
     return data;
   },
 
-  async getDocuments(barangayId = 1) {
+  async getDocuments(psgcCode = 'BRGY-001') {
     const { data, error } = await supabase
-      .from('document_requests')
+      .from('requests')
       .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
+      .eq('psgc_code', psgcCode)
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(d => ({
       ...d,
-      name: d.resident_name || d.name,
-      type: d.document_type || d.type,
-      pickup: d.pickup_date || d.pickup
+      name: d.requester_name || d.title || 'Resident',
+      type: d.document_type || d.category || 'Barangay Document',
+      pickup: d.pickup_date || ''
     }));
   },
 
   async updateDocument(id, updates) {
     const { data, error } = await supabase
-      .from('document_requests')
+      .from('requests')
       .update(updates)
       .eq('id', id);
     if (error) throw error;
     return data;
   },
 
-  async getAnnouncements(barangayId = 1) {
+  async getAnnouncements(psgcCode = 'BRGY-001') {
     const { data, error } = await supabase
       .from('announcements')
       .select('*')
-      .eq('barangay_id', barangayId)
-      .order('id', { ascending: false });
-
+      .eq('psgc_code', psgcCode)
+      .order('created_at', { ascending: false });
     if (error) throw error;
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -130,25 +134,28 @@ export const DataService = {
 
       return {
         ...a,
-        tag: a.category || a.tag,
+        tag: a.category || a.type || 'General',
+        description: a.body || '',
         posted: a.created_at ? new Date(a.created_at).toLocaleDateString() : 'Recent',
-        isArchived: isArchived,
-        is_archived: isArchived
+        isArchived: isArchived
       };
     });
   },
 
-  async createAnnouncement({ title, description, eventDate, category, barangayId = 1 }) {
+  async createAnnouncement({ title, description, eventDate, category, psgcCode, authorId }) {
+    const payload = {
+      title,
+      body: description,
+      event_date: eventDate || null,
+      category,
+      type: category,
+      psgc_code: String(psgcCode),
+      author_id: authorId
+    };
+    
     const { data, error } = await supabase
       .from('announcements')
-      .insert([{
-        barangay_id: barangayId,
-        title,
-        description,
-        event_date: eventDate || null,
-        category,
-        is_archived: false
-      }]);
+      .insert([payload]);
     if (error) throw error;
     return data;
   },
@@ -158,9 +165,10 @@ export const DataService = {
       .from('announcements')
       .update({
         title,
-        description,
+        body: description,
         event_date: eventDate || null,
-        category
+        category,
+        type: category
       })
       .eq('id', id);
     if (error) throw error;
@@ -170,7 +178,7 @@ export const DataService = {
   async archiveAnnouncement(id) {
     const { data, error } = await supabase
       .from('announcements')
-      .update({ is_archived: true })
+      .update({ is_archived: true }) 
       .eq('id', id);
     if (error) throw error;
     return data;
@@ -185,29 +193,31 @@ export const DataService = {
     return data;
   },
 
-  async getEmergencyContacts(barangayId = 1) {
+  async getEmergencyContacts(psgcCode = 'BRGY-001') {
     const { data, error } = await supabase
       .from('emergency_contacts')
       .select('*')
-      .eq('barangay_id', barangayId)
+      .eq('psgc_code', psgcCode)
       .order('id', { ascending: true });
     if (error) throw error;
     return (data || []).map(c => ({
       ...c,
-      num: c.contact_number || c.num || c.number,
-      number: c.contact_number || c.num || c.number
+      num: c.phone_number || c.contact_number,
+      number: c.phone_number || c.contact_number
     }));
   },
 
-  async createEmergencyContact({ name, category, num, barangayId = 1 }) {
+async createEmergencyContact({ name, category, num, psgcCode }) {
+    const payload = {
+      name: name,
+      scope: category,       // Do NOT put 'category: category' here
+      phone_number: num,     // Do NOT put 'contact_number: num' here
+      psgc_code: String(psgcCode)
+    };
+
     const { data, error } = await supabase
       .from('emergency_contacts')
-      .insert([{
-        barangay_id: barangayId,
-        name,
-        category,
-        contact_number: num
-      }]);
+      .insert([payload]);
     if (error) throw error;
     return data;
   },
@@ -216,9 +226,9 @@ export const DataService = {
     const { data, error } = await supabase
       .from('emergency_contacts')
       .update({
-        name,
-        category,
-        contact_number: num
+        name: name,
+        scope: category,     
+        phone_number: num   
       })
       .eq('id', id);
     if (error) throw error;

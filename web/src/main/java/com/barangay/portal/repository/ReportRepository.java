@@ -2,9 +2,14 @@ package com.barangay.portal.repository;
 
 import com.barangay.portal.entity.Report;
 import org.springframework.data.jpa.repository.JpaRepository;
-import java.util.List;
+import org.springframework.stereotype.Repository;
 
-public interface ReportRepository extends JpaRepository<Report, Long> {
-    List<Report> findByReporterUid(String reporterUid);
-    List<Report> findAllByOrderByCreatedAtDesc();
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface ReportRepository extends JpaRepository<Report, UUID> {
+    List<Report> findByPsgcCodeOrderByCreatedAtDesc(String psgcCode); // Dynamic per barangay
+    List<Report> findByResidentId(UUID residentId);
+    List<Report> findByStatus(String status);
 }

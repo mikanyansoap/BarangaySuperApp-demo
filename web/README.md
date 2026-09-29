@@ -1,12 +1,8 @@
-<<<<<<< HEAD
-# Admin Web Portal
+# Barangay Web Portal
 
-This directory is reserved for the web team to build the admin side.
-=======
-# Barangay SuperApp
+Spring Boot admin portal.
 
-This repository contains the source code for the Barangay SuperApp.
+    cd web
+    ./gradlew bootRun
 
-- **/mobile**: Android client application
-- **/web**: Web admin portal
->>>>>>> edbe1444c11dea597dce8f7a4fec4009fcfc24e7
+Keep secrets in environment variables, not in git.
