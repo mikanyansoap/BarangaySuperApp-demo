@@ -5,6 +5,33 @@ const SUPABASE_ANON_KEY = 'sb_publishable_eKmPItxbga4MB9Rn2JuMJw_04jCCvGE';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const REPORT_CATEGORIES = ['complaint', 'disaster', 'incident', 'emergency', 'report'];
+const isReport = (r) => REPORT_CATEGORIES.includes(String(r.category || '').trim().toLowerCase());
+
+
+async function updateRequest(id, updates) {
+  const { data, error } = await supabase
+    .from('requests')
+    .update(updates)
+    .eq('id', id)
+    .select();
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('Update changed 0 rows. Check the RLS UPDATE policy on public.requests.');
+  }
+  return data;
+}
+
+async function getRequestsFor(psgcCode) {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('*')
+    .eq('psgc_code', psgcCode)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 export const DataService = {
 
   async login(email, password) {
@@ -36,14 +63,7 @@ export const DataService = {
   },
 
   async getReports(psgcCode = 'BRGY-001') {
-    const { data, error } = await supabase
-      .from('requests')
-      .select('*')
-      .eq('psgc_code', psgcCode)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data || [];
+    return (await getRequestsFor(psgcCode)).filter(isReport);
   },
 
   async getReportById(id) {
@@ -53,16 +73,13 @@ export const DataService = {
       .eq('id', id)
       .single();
     if (error) throw error;
-    return data;
+    return { ...data, internal_notes: data.admin_remarks };
   },
 
   async updateReport(id, updates) {
-    const { data, error } = await supabase
-      .from('requests')
-      .update(updates)
-      .eq('id', id);
-    if (error) throw error;
-    return data;
+    const { internal_notes, ...rest } = updates;
+    const payload = internal_notes !== undefined ? { ...rest, admin_remarks: internal_notes } : rest;
+    return updateRequest(id, payload);
   },
 
   async getApprovals(psgcCode = 'BRGY-001') {
@@ -95,27 +112,31 @@ export const DataService = {
   },
 
   async getDocuments(psgcCode = 'BRGY-001') {
-    const { data, error } = await supabase
-      .from('requests')
-      .select('*')
-      .eq('psgc_code', psgcCode)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map(d => ({
+    const rows = (await getRequestsFor(psgcCode)).filter(r => !isReport(r));
+
+    const ids = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+    const names = {};
+    if (ids.length) {
+      const { data: profs, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', ids);
+      if (error) console.warn('Could not load requester names:', error);
+      (profs || []).forEach(p => {
+        names[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
+      });
+    }
+
+    return rows.map(d => ({
       ...d,
-      name: d.requester_name || d.title || 'Resident',
-      type: d.document_type || d.category || 'Barangay Document',
+      name: names[d.user_id] || 'Resident',
+      type: d.item_type || d.title || d.category || 'Barangay Document',
       pickup: d.pickup_date || ''
     }));
   },
 
   async updateDocument(id, updates) {
-    const { data, error } = await supabase
-      .from('requests')
-      .update(updates)
-      .eq('id', id);
-    if (error) throw error;
-    return data;
+    return updateRequest(id, updates);
   },
 
   async getAnnouncements(psgcCode = 'BRGY-001') {
@@ -210,8 +231,8 @@ export const DataService = {
 async createEmergencyContact({ name, category, num, psgcCode }) {
     const payload = {
       name: name,
-      scope: category,       // Do NOT put 'category: category' here
-      phone_number: num,     // Do NOT put 'contact_number: num' here
+      scope: category,       
+      phone_number: num,     
       psgc_code: String(psgcCode)
     };
 
