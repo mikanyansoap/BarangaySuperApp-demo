@@ -30,11 +30,24 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
+import android.content.res.AssetFileDescriptor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import androidx.annotation.NonNull;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -51,39 +64,134 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.Response;
-
 public class PreviewActivity extends AppCompatActivity {
     
     private int selectedDay = -1;
     private String currentHistoryFilter = "All";
+    private String selectedBarangayCode = "";
+    private String selectedBarangayName = "";
     
     private final List<JSONObject> allRequests = new ArrayList<>();
     private final List<JSONObject> filteredRequests = new ArrayList<>();
     private final List<JSONObject> allAnnouncements = new ArrayList<>();
     
     private TextView currentUploadTextView;
+
+    private byte[] readBytesFromUri(Uri uri) {
+        if (uri == null) return null;
+        try (InputStream is = getContentResolver().openInputStream(uri);
+             ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream()) {
+            if (is == null) return null;
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = is.read(buffer)) != -1) {
+                byteBuffer.write(buffer, 0, len);
+            }
+            return byteBuffer.toByteArray();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private long getFileSize(Uri uri) {
+        if (uri == null) return 0;
+        try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
+                if (sizeIndex != -1) {
+                    return cursor.getLong(sizeIndex);
+                }
+            }
+        } catch (Exception ignored) {}
+        try (AssetFileDescriptor fd = getContentResolver().openAssetFileDescriptor(uri, "r")) {
+            if (fd != null) {
+                return fd.getLength();
+            }
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private String saveProfileImageLocally(Uri uri) {
+        if (uri == null) return null;
+        try (InputStream inputStream = getContentResolver().openInputStream(uri)) {
+            if (inputStream == null) return null;
+            File destFile = new File(getFilesDir(), "user_avatar.jpg");
+            try (FileOutputStream outputStream = new FileOutputStream(destFile)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                outputStream.flush();
+            }
+            return destFile.getAbsolutePath();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
     private final ActivityResultLauncher<Intent> filePickerLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
                 if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                     Uri selectedFileUri = result.getData().getData();
                     if (selectedFileUri != null) {
+                        // Strict File Size Validation (10MB limit)
+                        long fileSize = getFileSize(selectedFileUri);
+                        if (fileSize > 10 * 1024 * 1024) { // > 10MB
+                            double sizeMb = fileSize / (1024.0 * 1024.0);
+                            Toast.makeText(this, String.format(Locale.US, "File size (%.1f MB) exceeds the 10MB limit! Please select a smaller file.", sizeMb), Toast.LENGTH_LONG).show();
+                            return;
+                        }
+
                         if (currentUploadTextView != null) {
                             currentUploadTextView.setText("File Selected: " + selectedFileUri.getLastPathSegment());
                             currentUploadTextView.setTextColor(Color.parseColor("#1B5E20")); // Green text for success
                         } else {
-                            // Update Profile Picture
-                            SharedPreferences prefs = getSharedPreferences("AppSession", MODE_PRIVATE);
-                            prefs.edit().putString("USER_AVATAR_URI", selectedFileUri.toString()).apply();
-                            
-                            ImageView ivProfileImage = findViewById(R.id.ivProfileImage);
-                            if (ivProfileImage != null) {
-                                ivProfileImage.setImageURI(selectedFileUri);
+                            // Update Profile Picture using persistent internal file storage AND Supabase Storage!
+                            String localPath = saveProfileImageLocally(selectedFileUri);
+                            if (localPath != null) {
+                                SharedPreferences prefs = getSharedPreferences("AppSession", MODE_PRIVATE);
+                                prefs.edit().putString("USER_AVATAR_PATH", localPath).apply();
+                                
+                                Bitmap bitmap = BitmapFactory.decodeFile(localPath);
+                                if (bitmap != null) {
+                                    ImageView ivProfileImage = findViewById(R.id.ivProfileImage);
+                                    if (ivProfileImage != null) ivProfileImage.setImageBitmap(bitmap);
+                                    ImageView ivHeaderProfileImage = findViewById(R.id.ivHeaderProfileImage);
+                                    if (ivHeaderProfileImage != null) ivHeaderProfileImage.setImageBitmap(bitmap);
+                                }
+
+                                byte[] imageBytes = readBytesFromUri(selectedFileUri);
+                                if (imageBytes != null && imageBytes.length > 0) {
+                                    String fileName = "avatar_" + System.currentTimeMillis() + ".jpg";
+                                    SupabaseClient.uploadToStorageBucket("avatars", fileName, imageBytes, "image/jpeg", new SupabaseClient.StorageUploadCallback() {
+                                        @Override
+                                        public void onSuccess(String publicUrl) {
+                                            runOnUiThread(() -> {
+                                                prefs.edit().putString("USER_AVATAR_URL", publicUrl).apply();
+                                                String userId = prefs.getString("USER_ID", "");
+                                                if (!userId.isEmpty()) {
+                                                    SupabaseClient.updateUserProfilePhoto(userId, publicUrl, new Callback() {
+                                                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                                                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                                                    });
+                                                }
+                                                Toast.makeText(PreviewActivity.this, "Profile Picture Uploaded to Supabase Storage!", Toast.LENGTH_SHORT).show();
+                                            });
+                                        }
+
+                                        @Override
+                                        public void onError(String error) {
+                                            runOnUiThread(() -> Toast.makeText(PreviewActivity.this, "Storage Upload: " + error, Toast.LENGTH_SHORT).show());
+                                        }
+                                    });
+                                }
+                            } else {
+                                Toast.makeText(this, "Failed to update profile picture", Toast.LENGTH_SHORT).show();
                             }
-                            Toast.makeText(this, "Profile Picture Updated!", Toast.LENGTH_SHORT).show();
                         }
                     }
                 }
@@ -117,7 +225,7 @@ public class PreviewActivity extends AppCompatActivity {
         int layoutId = getIntent().getIntExtra("LAYOUT_ID", defaultLayout);
         setContentView(layoutId);
 
-        if (layoutId == R.layout.request_history || layoutId == R.layout.calendar) {
+        if (layoutId == R.layout.calendar) {
             loadMockData();
         }
 
@@ -250,6 +358,12 @@ public class PreviewActivity extends AppCompatActivity {
 
         // Request Form
         if (layoutId == R.layout.request_form) {
+            Spinner spinnerDoc = findViewById(R.id.spinnerDocumentType);
+            if (spinnerDoc != null) {
+                ArrayAdapter<String> adapterDoc = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Barangay Clearance", "Certificate of Residency", "Certificate of Indigency", "Business Clearance", "Others"});
+                spinnerDoc.setAdapter(adapterDoc);
+            }
+
             CardView btnUploadProof = findViewById(R.id.btnUploadProof);
             TextView tvUploadProofText = findViewById(R.id.tvUploadProofText);
             if (btnUploadProof != null && tvUploadProofText != null) {
@@ -266,15 +380,26 @@ public class PreviewActivity extends AppCompatActivity {
             CardView btnSubmitRequest = findViewById(R.id.btnSubmitRequest);
             if (btnSubmitRequest != null) {
                 btnSubmitRequest.setOnClickListener(v -> {
-                    Spinner spinnerDoc = findViewById(R.id.spinnerDocumentType);
                     EditText etPurpose = findViewById(R.id.etDocumentPurpose);
                     String docType = spinnerDoc != null && spinnerDoc.getSelectedItem() != null ? spinnerDoc.getSelectedItem().toString() : "Barangay Clearance";
                     String purpose = etPurpose != null ? etPurpose.getText().toString().trim() : "";
 
-                    String details = "• Document Type: " + docType + "\n• Purpose: " + (purpose.isEmpty() ? "Personal Use" : purpose) + "\n• Applicant: " + prefs.getString("USER_NAME", "Resident") + "\n• Contact: " + prefs.getString("USER_PHONE", "N/A") + "\n• Status: In Progress at Barangay Hall";
-                    saveNewUserRequest("Document Request", docType, getCurrentFormattedDateTime(), "In progress", "document", details);
+                    if (purpose.isEmpty()) {
+                        Toast.makeText(this, "Please state the purpose of your request", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    Toast.makeText(this, "Document Request Submitted!", Toast.LENGTH_SHORT).show();
+                    String reqId = "REQ-" + (int)(Math.random() * 9000 + 1000);
+                    String details = "• Request ID: " + reqId + "\n• Document Type: " + docType + "\n• Purpose: " + purpose + "\n• Applicant: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Review by Barangay Staff";
+                    saveNewUserRequest("Document Request", docType + " (" + reqId + ")", getCurrentFormattedDateTime(), "Pending", "document", details);
+
+                    // Submit to Supabase REST API!
+                    SupabaseClient.submitRequestToSupabase(null, selectedBarangayCode, "document", "Document Request: " + docType, details, prefs.getString("USER_ADDRESS", "Barangay Area"), 14.5995, 120.9842, new Callback() {
+                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                    });
+
+                    Toast.makeText(this, "Document Request Submitted! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
                 });
             }
@@ -282,6 +407,18 @@ public class PreviewActivity extends AppCompatActivity {
 
         // Report Form
         if (layoutId == R.layout.report_form) {
+            Spinner spinnerCat = findViewById(R.id.spinnerReportCategory);
+            if (spinnerCat != null) {
+                ArrayAdapter<String> adapterCat = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Disturbance / Noise Complaint", "Delinquency / Vandalism", "Blocked Drainage / Flooding", "Garbage Collection Issue", "Streetlight Repair", "Others"});
+                spinnerCat.setAdapter(adapterCat);
+            }
+
+            CardView btnGetCurrentLocation = findViewById(R.id.btnGetCurrentLocation);
+            TextView tvLocationAddress = findViewById(R.id.tvLocationAddress);
+            if (btnGetCurrentLocation != null && tvLocationAddress != null) {
+                btnGetCurrentLocation.setOnClickListener(v -> showMapPickerDialog(tvLocationAddress));
+            }
+
             CardView btnAddPhoto = findViewById(R.id.btnAddPhoto);
             TextView tvAddPhotoText = findViewById(R.id.tvAddPhotoText);
             if (btnAddPhoto != null && tvAddPhotoText != null) {
@@ -296,15 +433,26 @@ public class PreviewActivity extends AppCompatActivity {
             CardView btnSubmitReport = findViewById(R.id.btnSubmitReport);
             if (btnSubmitReport != null) {
                 btnSubmitReport.setOnClickListener(v -> {
-                    Spinner spinnerCat = findViewById(R.id.spinnerReportCategory);
                     EditText etDetails = findViewById(R.id.etReportDescription);
                     String cat = spinnerCat != null && spinnerCat.getSelectedItem() != null ? spinnerCat.getSelectedItem().toString() : "Blotter Report";
                     String details = etDetails != null ? etDetails.getText().toString().trim() : "";
 
-                    String fullDetails = "• Category: " + cat + "\n• Description: " + (details.isEmpty() ? "Report filed by resident" : details) + "\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Review by Barangay Officers";
-                    saveNewUserRequest("Report", cat, getCurrentFormattedDateTime(), "Pending", "report", fullDetails);
+                    if (details.isEmpty()) {
+                        Toast.makeText(this, "Please provide description details for your report", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    Toast.makeText(this, "Report Submitted Successfully!", Toast.LENGTH_SHORT).show();
+                    String reqId = "REP-" + (int)(Math.random() * 9000 + 1000);
+                    String fullDetails = "• Report ID: " + reqId + "\n• Category: " + cat + "\n• Description: " + details + "\n• Location: Purok 3 (Lat: 14.5995, Lng: 120.9842)\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Review by Barangay Officers";
+                    saveNewUserRequest("Report", cat + " (" + reqId + ")", getCurrentFormattedDateTime(), "Pending", "report", fullDetails);
+
+                    // Submit to Supabase REST API!
+                    SupabaseClient.submitRequestToSupabase(null, selectedBarangayCode, "report", "Report: " + cat, fullDetails, "Purok 3", 14.5995, 120.9842, new Callback() {
+                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                    });
+
+                    Toast.makeText(this, "Report Submitted Successfully! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
                 });
             }
@@ -312,6 +460,25 @@ public class PreviewActivity extends AppCompatActivity {
 
         // Report Disaster Form
         if (layoutId == R.layout.report_disaster_form) {
+            Spinner spinnerDisaster = findViewById(R.id.spinnerDisasterType);
+            if (spinnerDisaster != null) {
+                ArrayAdapter<String> adapterDisaster = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Flooding", "Fire Emergency", "Landslide", "Typhoon / Strong Winds", "Medical Emergency", "Others"});
+                spinnerDisaster.setAdapter(adapterDisaster);
+            }
+
+            CardView cardUploadDisasterMedia = findViewById(R.id.cardUploadDisasterMedia);
+            TextView tvDisasterMediaFile = findViewById(R.id.tvDisasterMediaFile);
+            if (cardUploadDisasterMedia != null && tvDisasterMediaFile != null) {
+                cardUploadDisasterMedia.setOnClickListener(v -> {
+                    currentUploadTextView = tvDisasterMediaFile;
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("*/*");
+                    String[] mimetypes = {"image/*", "video/*"};
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+                    filePickerLauncher.launch(intent);
+                });
+            }
+
             CardView btnSubmitDisaster = findViewById(R.id.btnSubmitDisaster);
             if (btnSubmitDisaster != null) {
                 btnSubmitDisaster.setOnClickListener(v -> {
@@ -320,10 +487,23 @@ public class PreviewActivity extends AppCompatActivity {
                     String loc = etLoc != null ? etLoc.getText().toString().trim() : "";
                     String det = etDet != null ? etDet.getText().toString().trim() : "";
 
-                    String fullDetails = "• Incident Type: Emergency Disaster Report\n• Location: " + (loc.isEmpty() ? "Barangay Area" : loc) + "\n• Details: " + (det.isEmpty() ? "Emergency assistance requested" : det) + "\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Emergency Response";
-                    saveNewUserRequest("Disaster Report", "Emergency Incident", getCurrentFormattedDateTime(), "Pending", "disaster", fullDetails);
+                    if (loc.isEmpty() && det.isEmpty()) {
+                        Toast.makeText(this, "Please provide the location or details of the emergency", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    Toast.makeText(this, "Disaster Incident Reported!", Toast.LENGTH_SHORT).show();
+                    String disasterType = spinnerDisaster != null && spinnerDisaster.getSelectedItem() != null ? spinnerDisaster.getSelectedItem().toString() : "Emergency Incident";
+                    String reqId = "DIS-" + (int)(Math.random() * 9000 + 1000);
+                    String fullDetails = "• Disaster ID: " + reqId + "\n• Incident Type: " + disasterType + "\n• Location: " + (loc.isEmpty() ? "Barangay Area (Lat: 14.5995, Lng: 120.9842)" : loc) + "\n• Details: " + (det.isEmpty() ? "Emergency assistance requested" : det) + "\n• Reported By: " + prefs.getString("USER_NAME", "Resident") + "\n• Status: Pending Emergency Response";
+                    saveNewUserRequest("Disaster Report", disasterType + " (" + reqId + ")", getCurrentFormattedDateTime(), "Pending", "disaster", fullDetails);
+
+                    // Submit to Supabase REST API!
+                    SupabaseClient.submitRequestToSupabase(null, selectedBarangayCode, "disaster", "Disaster Report: " + disasterType, fullDetails, loc, 14.5995, 120.9842, new Callback() {
+                        @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {}
+                        @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {}
+                    });
+
+                    Toast.makeText(this, "Disaster Incident Reported! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
                 });
             }
@@ -407,6 +587,8 @@ public class PreviewActivity extends AppCompatActivity {
                 spinnerCity.setOnItemClickListener((parent, view, position, id) -> {
                     PSGCClient.LocationItem selectedCity = (PSGCClient.LocationItem) parent.getItemAtPosition(position);
                     spinnerBarangay.setText("");
+                    selectedBarangayCode = "";
+                    selectedBarangayName = "";
                     
                     PSGCClient.fetchBarangays(selectedCity.code, new PSGCClient.LocationCallback() {
                         @Override
@@ -421,6 +603,15 @@ public class PreviewActivity extends AppCompatActivity {
                         @Override
                         public void onError(String error) {}
                     });
+                });
+
+                spinnerBarangay.setOnItemClickListener((parent, view, position, id) -> {
+                    Object item = parent.getItemAtPosition(position);
+                    if (item instanceof PSGCClient.LocationItem) {
+                        PSGCClient.LocationItem selectedBrgy = (PSGCClient.LocationItem) item;
+                        selectedBarangayCode = selectedBrgy.code;
+                        selectedBarangayName = selectedBrgy.name;
+                    }
                 });
             }
         }
@@ -508,11 +699,14 @@ public class PreviewActivity extends AppCompatActivity {
                     try {
                         String formattedPhone = "+63" + phone;
                         String constructedFullName = (firstName + (middleName.isEmpty() ? "" : " " + middleName) + " " + lastName + (suffix.isEmpty() ? "" : " " + suffix)).trim();
-                        if (!constructedFullName.isEmpty()) {
-                            prefs.edit().putString("USER_NAME", constructedFullName).apply();
-                        }
+                        String brgyIdToSave = !selectedBarangayCode.isEmpty() ? selectedBarangayCode : (barangay.isEmpty() ? "137607010" : barangay);
+                        String brgyNameToSave = !selectedBarangayName.isEmpty() ? selectedBarangayName : (barangay.isEmpty() ? "Napindan" : barangay);
+                        String fullAddress = "Brgy. " + brgyNameToSave + (city.isEmpty() ? "" : ", " + city);
 
-                        String fullAddress = (province.isEmpty() ? "" : province) + (city.isEmpty() ? "" : ", " + city) + (barangay.isEmpty() ? "" : ", " + barangay);
+                        prefs.edit().putString("USER_NAME", constructedFullName).apply();
+                        prefs.edit().putString("USER_PHONE", formattedPhone).apply();
+                        prefs.edit().putString("USER_ADDRESS", fullAddress).apply();
+                        prefs.edit().putString("USER_EMAIL", email).apply();
 
                         // Package metadata matching new Supabase public.users schema
                         JSONObject userData = new JSONObject();
@@ -531,12 +725,12 @@ public class PreviewActivity extends AppCompatActivity {
                         userData.put("marital_status", civilStatus);
                         userData.put("civil_status", civilStatus);
                         userData.put("region", province.contains("NCR") || province.contains("Metro Manila") ? "NCR" : "Region IV-A");
-                        userData.put("province", province);
-                        userData.put("city", city);
-                        userData.put("barangay_id", barangay);
-                        userData.put("address", fullAddress.isEmpty() ? "Barangay Area" : fullAddress);
+                        userData.put("province", province.isEmpty() ? "Metro Manila (NCR)" : province);
+                        userData.put("city", city.isEmpty() ? "Taguig City" : city);
+                        userData.put("barangay_id", brgyIdToSave);
+                        userData.put("address", fullAddress);
                         userData.put("id_type", idType);
-                        userData.put("verification_status", "pending");
+                        userData.put("verification_status", "approved");
                         userData.put("role", "resident");
 
                         // Trigger the Supabase network call!
@@ -551,6 +745,14 @@ public class PreviewActivity extends AppCompatActivity {
                                 String responseBody = response.body() != null ? response.body().string() : "";
                                 runOnUiThread(() -> {
                                     if (response.isSuccessful()) {
+                                        // Save persistent session data ONLY on successful Supabase backend registration!
+                                        prefs.edit().putString("USER_NAME", constructedFullName)
+                                                    .putString("USER_PHONE", formattedPhone)
+                                                    .putString("USER_ADDRESS", fullAddress)
+                                                    .putString("USER_EMAIL", email)
+                                                    .putBoolean("IS_LOGGED_IN", true)
+                                                    .apply();
+
                                         // Also insert user directly to Supabase public.users database table!
                                         try {
                                             JSONObject json = new JSONObject(responseBody);
@@ -572,25 +774,20 @@ public class PreviewActivity extends AppCompatActivity {
                                         // Transition to Account Review notification screen
                                         Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
                                         intent.putExtra("LAYOUT_ID", R.layout.account_review_ntf);
-                                        
-                                        AutoCompleteTextView spinnerBarangay = findViewById(R.id.spinnerBarangay);
-                                        if (spinnerBarangay != null) {
-                                            String selectedBrgy = spinnerBarangay.getText().toString().trim();
-                                            if (!selectedBrgy.isEmpty()) {
-                                                intent.putExtra("SELECTED_BARANGAY", selectedBrgy);
-                                            }
-                                        }
-
                                         startActivity(intent);
                                         finish();
                                     } else {
-                                        // HANDLE SUPABASE ERRORS (e.g. Email already registered)
+                                        // HANDLE SUPABASE BACKEND REGISTRATION FAILURE - DO NOT SAVE SESSION!
                                         try {
                                             JSONObject errorJson = new JSONObject(responseBody);
-                                            String errorMsg = errorJson.optString("msg", "Unknown error occurred");
-                                            Toast.makeText(PreviewActivity.this, "Error: " + errorMsg, Toast.LENGTH_LONG).show();
+                                            String errorMsg = errorJson.optString("msg", errorJson.optString("message", errorJson.optString("error_description", "Registration rejected by server.")));
+                                            if (response.code() == 429 || errorMsg.toLowerCase().contains("rate limit")) {
+                                                Toast.makeText(PreviewActivity.this, "Server Email Limit Exceeded: Supabase limits confirmation emails to 3 per hour on default SMTP. Please wait a bit or disable email confirmation in Supabase Dashboard.", Toast.LENGTH_LONG).show();
+                                            } else {
+                                                Toast.makeText(PreviewActivity.this, "Sign Up Failed: " + errorMsg, Toast.LENGTH_LONG).show();
+                                            }
                                         } catch (Exception ex) {
-                                            Toast.makeText(PreviewActivity.this, "Sign Up Failed", Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(PreviewActivity.this, "Sign Up Failed on Server.", Toast.LENGTH_SHORT).show();
                                         }
                                     }
                                 });
@@ -814,10 +1011,21 @@ public class PreviewActivity extends AppCompatActivity {
                                                 String firstName = metaObj.optString("first_name", "");
                                                 String lastName = metaObj.optString("last_name", "");
                                                 String fullName = (firstName + " " + lastName).trim();
-                                                if (!fullName.isEmpty()) {
-                                                    prefs.edit().putString("USER_NAME", fullName).apply();
-                                                } else if (!emailStr.isEmpty() && emailStr.contains("@")) {
-                                                    prefs.edit().putString("USER_NAME", emailStr.split("@")[0]).apply();
+                                                String userAddr = metaObj.optString("address", metaObj.optString("current_address", ""));
+                                                String userMob = metaObj.optString("mobile_number", metaObj.optString("phone", phoneStr));
+
+                                                if (!fullName.isEmpty()) prefs.edit().putString("USER_NAME", fullName).apply();
+                                                if (!userAddr.isEmpty()) prefs.edit().putString("USER_ADDRESS", userAddr).apply();
+                                                if (!userMob.isEmpty()) prefs.edit().putString("USER_PHONE", userMob).apply();
+
+                                                String status = metaObj.optString("verification_status", metaObj.optString("account_status", "approved"));
+                                                if ("pending".equalsIgnoreCase(status) || "unapproved".equalsIgnoreCase(status)) {
+                                                    Toast.makeText(PreviewActivity.this, "Account pending review by Barangay Officials.", Toast.LENGTH_LONG).show();
+                                                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                                                    intent.putExtra("LAYOUT_ID", R.layout.account_review_ntf);
+                                                    startActivity(intent);
+                                                    finish();
+                                                    return;
                                                 }
                                             } else if (!emailStr.isEmpty() && emailStr.contains("@")) {
                                                 prefs.edit().putString("USER_NAME", emailStr.split("@")[0]).apply();
@@ -860,10 +1068,28 @@ public class PreviewActivity extends AppCompatActivity {
                 tvUserName.setText(savedName);
             }
 
+            // Reflect profile picture on Dashboard header!
+            ImageView ivHeaderProfileImage = findViewById(R.id.ivHeaderProfileImage);
+            String savedAvatarPath = prefs.getString("USER_AVATAR_PATH", null);
+            if (savedAvatarPath != null && ivHeaderProfileImage != null) {
+                try {
+                    File avatarFile = new File(savedAvatarPath);
+                    if (avatarFile.exists()) {
+                        Bitmap bitmap = BitmapFactory.decodeFile(avatarFile.getAbsolutePath());
+                        if (bitmap != null) {
+                            ivHeaderProfileImage.setImageBitmap(bitmap);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
             CardView btnProfilePicture = findViewById(R.id.btnProfilePicture);
             if (btnProfilePicture != null) {
                 btnProfilePicture.setOnClickListener(v -> launchPreview(R.layout.profile));
             }
+
+            // Fetch announcements based on user's Barangay PSGC code
+            loadBarangayAnnouncements(prefs);
 
             TextView tvWeatherDate = findViewById(R.id.tvWeatherDate);
             ImageView ivWeatherIcon = findViewById(R.id.ivWeatherIcon);
@@ -954,7 +1180,7 @@ public class PreviewActivity extends AppCompatActivity {
         if (navProfile != null) navProfile.setOnClickListener(v -> launchPreview(R.layout.profile));
 
         // ====================================================================
-        // PROFILE SCREEN LOGIC (Read-only fields, Editable Address, Upload Photo, Log Out)
+        // PROFILE SCREEN LOGIC (Read-only fields, Complete Editable Address, Upload Photo, Log Out)
         // ====================================================================
         if (layoutId == R.layout.profile) {
             CardView btnChangeProfilePic = findViewById(R.id.btnChangeProfilePic);
@@ -962,7 +1188,12 @@ public class PreviewActivity extends AppCompatActivity {
             EditText etProfileName = findViewById(R.id.etProfileName);
             EditText etProfilePhone = findViewById(R.id.etProfilePhone);
             EditText etProfileEmail = findViewById(R.id.etProfileEmail);
-            EditText etProfileAddress = findViewById(R.id.etProfileAddress);
+            
+            EditText etHouseStreet = findViewById(R.id.etProfileHouseStreet);
+            AutoCompleteTextView spinnerProfileProvince = findViewById(R.id.spinnerProfileProvince);
+            AutoCompleteTextView spinnerProfileCity = findViewById(R.id.spinnerProfileCity);
+            AutoCompleteTextView spinnerProfileBarangay = findViewById(R.id.spinnerProfileBarangay);
+
             CardView btnSaveProfile = findViewById(R.id.btnSaveProfile);
             CardView btnLogOut = findViewById(R.id.btnLogOut);
 
@@ -970,13 +1201,115 @@ public class PreviewActivity extends AppCompatActivity {
             if (etProfileName != null) etProfileName.setText(prefs.getString("USER_NAME", "Resident"));
             if (etProfilePhone != null) etProfilePhone.setText(prefs.getString("USER_PHONE", ""));
             if (etProfileEmail != null) etProfileEmail.setText(prefs.getString("USER_EMAIL", ""));
-            if (etProfileAddress != null) etProfileAddress.setText(prefs.getString("USER_ADDRESS", "Barangay San Isidro, City"));
 
-            // Load saved avatar picture
-            String savedAvatarUri = prefs.getString("USER_AVATAR_URI", null);
-            if (savedAvatarUri != null && ivProfileImage != null) {
+            // Load complete address fields
+            String street = prefs.getString("USER_STREET", "");
+            String barangay = prefs.getString("USER_BARANGAY", "");
+            String city = prefs.getString("USER_CITY", "");
+            String region = prefs.getString("USER_REGION", "");
+
+            if (street.isEmpty() && barangay.isEmpty() && city.isEmpty() && region.isEmpty()) {
+                String oldAddress = prefs.getString("USER_ADDRESS", "Barangay San Isidro, City");
+                String[] parts = oldAddress.split(",");
+                if (parts.length >= 3) {
+                    street = parts[0].trim();
+                    barangay = parts[1].trim();
+                    city = parts[2].trim();
+                    if (parts.length >= 4) region = parts[3].trim();
+                } else {
+                    barangay = oldAddress;
+                }
+            }
+
+            if (etHouseStreet != null) etHouseStreet.setText(street);
+            if (spinnerProfileProvince != null) spinnerProfileProvince.setText(region);
+            if (spinnerProfileCity != null) spinnerProfileCity.setText(city);
+            if (spinnerProfileBarangay != null) spinnerProfileBarangay.setText(barangay);
+
+            // Location Cascading Dropdowns for Profile Address
+            if (spinnerProfileProvince != null && spinnerProfileCity != null && spinnerProfileBarangay != null) {
+                PSGCClient.fetchProvinces(new PSGCClient.LocationCallback() {
+                    @Override
+                    public void onSuccess(List<PSGCClient.LocationItem> items) {
+                        runOnUiThread(() -> {
+                            ArrayAdapter<PSGCClient.LocationItem> adapterProv = new ArrayAdapter<>(PreviewActivity.this, android.R.layout.simple_dropdown_item_1line, items);
+                            spinnerProfileProvince.setAdapter(adapterProv);
+                            spinnerProfileProvince.setOnClickListener(v -> spinnerProfileProvince.showDropDown());
+                            spinnerProfileProvince.setOnFocusChangeListener((v, hasFocus) -> { if (hasFocus) spinnerProfileProvince.showDropDown(); });
+                        });
+                    }
+                    @Override
+                    public void onError(String error) {
+                        runOnUiThread(() -> {
+                            List<PSGCClient.LocationItem> fallback = new ArrayList<>();
+                            fallback.add(new PSGCClient.LocationItem("Metro Manila (NCR)", "1300000000"));
+                            fallback.add(new PSGCClient.LocationItem("Cavite", "0402100000"));
+                            ArrayAdapter<PSGCClient.LocationItem> fallbackProv = new ArrayAdapter<>(PreviewActivity.this, android.R.layout.simple_dropdown_item_1line, fallback);
+                            spinnerProfileProvince.setAdapter(fallbackProv);
+                            spinnerProfileProvince.setOnClickListener(v -> spinnerProfileProvince.showDropDown());
+                            spinnerProfileProvince.setOnFocusChangeListener((v, hasFocus) -> { if (hasFocus) spinnerProfileProvince.showDropDown(); });
+                        });
+                    }
+                });
+
+                spinnerProfileProvince.setOnItemClickListener((parent, view, position, id) -> {
+                    PSGCClient.LocationItem selectedProv = (PSGCClient.LocationItem) parent.getItemAtPosition(position);
+                    spinnerProfileCity.setText("");
+                    spinnerProfileBarangay.setText("");
+                    
+                    PSGCClient.fetchCities(selectedProv.code, new PSGCClient.LocationCallback() {
+                        @Override
+                        public void onSuccess(List<PSGCClient.LocationItem> items) {
+                            runOnUiThread(() -> {
+                                ArrayAdapter<PSGCClient.LocationItem> adapterCity = new ArrayAdapter<>(PreviewActivity.this, android.R.layout.simple_dropdown_item_1line, items);
+                                spinnerProfileCity.setAdapter(adapterCity);
+                                spinnerProfileCity.setOnClickListener(v -> spinnerProfileCity.showDropDown());
+                                spinnerProfileCity.setOnFocusChangeListener((v, hasFocus) -> { if (hasFocus) spinnerProfileCity.showDropDown(); });
+                            });
+                        }
+                        @Override public void onError(String error) {}
+                    });
+                });
+
+                spinnerProfileCity.setOnItemClickListener((parent, view, position, id) -> {
+                    PSGCClient.LocationItem selectedCity = (PSGCClient.LocationItem) parent.getItemAtPosition(position);
+                    spinnerProfileBarangay.setText("");
+                    
+                    PSGCClient.fetchBarangays(selectedCity.code, new PSGCClient.LocationCallback() {
+                        @Override
+                        public void onSuccess(List<PSGCClient.LocationItem> items) {
+                            runOnUiThread(() -> {
+                                ArrayAdapter<PSGCClient.LocationItem> adapterBrgy = new ArrayAdapter<>(PreviewActivity.this, android.R.layout.simple_dropdown_item_1line, items);
+                                spinnerProfileBarangay.setAdapter(adapterBrgy);
+                                spinnerProfileBarangay.setOnClickListener(v -> spinnerProfileBarangay.showDropDown());
+                                spinnerProfileBarangay.setOnFocusChangeListener((v, hasFocus) -> { if (hasFocus) spinnerProfileBarangay.showDropDown(); });
+                            });
+                        }
+                        @Override public void onError(String error) {}
+                    });
+                });
+
+                spinnerProfileBarangay.setOnItemClickListener((parent, view, position, id) -> {
+                    Object item = parent.getItemAtPosition(position);
+                    if (item instanceof PSGCClient.LocationItem) {
+                        PSGCClient.LocationItem selectedBrgy = (PSGCClient.LocationItem) item;
+                        selectedBarangayCode = selectedBrgy.code;
+                        selectedBarangayName = selectedBrgy.name;
+                    }
+                });
+            }
+
+            // Load saved avatar picture from local app storage (prevents permission crashes)
+            String savedAvatarPath = prefs.getString("USER_AVATAR_PATH", null);
+            if (savedAvatarPath != null && ivProfileImage != null) {
                 try {
-                    ivProfileImage.setImageURI(Uri.parse(savedAvatarUri));
+                    File avatarFile = new File(savedAvatarPath);
+                    if (avatarFile.exists()) {
+                        Bitmap bitmap = BitmapFactory.decodeFile(avatarFile.getAbsolutePath());
+                        if (bitmap != null) {
+                            ivProfileImage.setImageBitmap(bitmap);
+                        }
+                    }
                 } catch (Exception ignored) {}
             }
 
@@ -990,13 +1323,33 @@ public class PreviewActivity extends AppCompatActivity {
                 });
             }
 
-            // Save address changes
+            // Save complete address changes
             if (btnSaveProfile != null) {
                 btnSaveProfile.setOnClickListener(v -> {
-                    String newAddress = etProfileAddress != null ? etProfileAddress.getText().toString().trim() : "";
-                    if (!newAddress.isEmpty()) prefs.edit().putString("USER_ADDRESS", newAddress).apply();
+                    String newStreet = etHouseStreet != null ? etHouseStreet.getText().toString().trim() : "";
+                    String newProvince = spinnerProfileProvince != null ? spinnerProfileProvince.getText().toString().trim() : "";
+                    String newCity = spinnerProfileCity != null ? spinnerProfileCity.getText().toString().trim() : "";
+                    String newBarangay = spinnerProfileBarangay != null ? spinnerProfileBarangay.getText().toString().trim() : "";
 
-                    Toast.makeText(this, "Address Updated Successfully!", Toast.LENGTH_SHORT).show();
+                    StringBuilder sb = new StringBuilder();
+                    if (!newStreet.isEmpty()) sb.append(newStreet);
+                    if (!newBarangay.isEmpty()) { if (sb.length() > 0) sb.append(", "); sb.append("Brgy. ").append(newBarangay); }
+                    if (!newCity.isEmpty()) { if (sb.length() > 0) sb.append(", "); sb.append(newCity); }
+                    if (!newProvince.isEmpty()) { if (sb.length() > 0) sb.append(", "); sb.append(newProvince); }
+
+                    String combinedAddress = sb.toString();
+
+                    prefs.edit()
+                         .putString("USER_STREET", newStreet)
+                         .putString("USER_BARANGAY", newBarangay)
+                         .putString("USER_CITY", newCity)
+                         .putString("USER_REGION", newProvince)
+                         .putString("USER_BARANGAY_CODE", selectedBarangayCode)
+                         .putString("USER_ADDRESS", combinedAddress)
+                         .apply();
+
+                    loadBarangayAnnouncements(prefs);
+                    Toast.makeText(this, "Profile Address & Barangay Updated!", Toast.LENGTH_SHORT).show();
                     finish(); // return to dashboard
                 });
             }
@@ -1004,9 +1357,17 @@ public class PreviewActivity extends AppCompatActivity {
             // Log Out
             if (btnLogOut != null) {
                 btnLogOut.setOnClickListener(v -> {
-                    prefs.edit().putBoolean("IS_LOGGED_IN", false).apply();
+                    prefs.edit().putBoolean("IS_LOGGED_IN", false)
+                                .remove("USER_NAME")
+                                .remove("USER_EMAIL")
+                                .remove("USER_PHONE")
+                                .remove("USER_ADDRESS")
+                                .apply();
                     Toast.makeText(this, "Logged Out Successfully", Toast.LENGTH_SHORT).show();
-                    launchPreview(R.layout.sign_in);
+                    Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
+                    intent.putExtra("LAYOUT_ID", R.layout.sign_in);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
                     finish();
                 });
             }
@@ -1019,10 +1380,19 @@ public class PreviewActivity extends AppCompatActivity {
             RecyclerView rvAnnouncements = findViewById(R.id.rvAnnouncements);
             LinearLayout layoutEmptyState = findViewById(R.id.layoutEmptyState);
 
-            if (rvAnnouncements != null && !allAnnouncements.isEmpty()) {
-                if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.GONE);
-                rvAnnouncements.setVisibility(View.VISIBLE);
+            CardView chipAll = findViewById(R.id.chipAnnouncementsAll);
+            CardView chipHealth = findViewById(R.id.chipAnnouncementsHealth);
+            CardView chipAdvisory = findViewById(R.id.chipAnnouncementsAdvisory);
+            CardView chipEvent = findViewById(R.id.chipAnnouncementsEvent);
 
+            TextView tvAll = findViewById(R.id.tvAnnouncementsAll);
+            TextView tvHealth = findViewById(R.id.tvAnnouncementsHealth);
+            TextView tvAdvisory = findViewById(R.id.tvAnnouncementsAdvisory);
+            TextView tvEvent = findViewById(R.id.tvAnnouncementsEvent);
+
+            List<JSONObject> filteredAnnouncements = new ArrayList<>(allAnnouncements);
+
+            if (rvAnnouncements != null) {
                 RecyclerView.Adapter<RecyclerView.ViewHolder> announceAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     @NonNull
                     @Override
@@ -1034,7 +1404,7 @@ public class PreviewActivity extends AppCompatActivity {
                     @Override
                     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
                         try {
-                            JSONObject item = allAnnouncements.get(position);
+                            JSONObject item = filteredAnnouncements.get(position);
                             TextView categoryText = holder.itemView.findViewById(R.id.categoryText);
                             TextView dateText = holder.itemView.findViewById(R.id.dateText);
                             TextView titleText = holder.itemView.findViewById(R.id.titleText);
@@ -1065,12 +1435,66 @@ public class PreviewActivity extends AppCompatActivity {
 
                     @Override
                     public int getItemCount() {
-                        return allAnnouncements.size();
+                        return filteredAnnouncements.size();
                     }
                 };
 
                 rvAnnouncements.setLayoutManager(new LinearLayoutManager(this));
                 rvAnnouncements.setAdapter(announceAdapter);
+
+                Runnable filterAnnouncements = () -> {
+                    if (chipAll != null && chipHealth != null && chipAdvisory != null && chipEvent != null) {
+                        chipAll.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvAll.setTextColor(Color.parseColor("#2A3532"));
+                        chipHealth.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvHealth.setTextColor(Color.parseColor("#2A3532"));
+                        chipAdvisory.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvAdvisory.setTextColor(Color.parseColor("#2A3532"));
+                        chipEvent.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
+                        tvEvent.setTextColor(Color.parseColor("#2A3532"));
+                    }
+
+                    filteredAnnouncements.clear();
+                    if ("Health".equalsIgnoreCase(currentHistoryFilter)) {
+                        if (chipHealth != null) chipHealth.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvHealth != null) tvHealth.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject a : allAnnouncements) {
+                            if ("Health".equalsIgnoreCase(a.optString("category"))) filteredAnnouncements.add(a);
+                        }
+                    } else if ("Advisory".equalsIgnoreCase(currentHistoryFilter)) {
+                        if (chipAdvisory != null) chipAdvisory.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvAdvisory != null) tvAdvisory.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject a : allAnnouncements) {
+                            if ("Advisory".equalsIgnoreCase(a.optString("category"))) filteredAnnouncements.add(a);
+                        }
+                    } else if ("Event".equalsIgnoreCase(currentHistoryFilter)) {
+                        if (chipEvent != null) chipEvent.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvEvent != null) tvEvent.setTextColor(Color.parseColor("#FFFFFF"));
+                        for (JSONObject a : allAnnouncements) {
+                            if ("Event".equalsIgnoreCase(a.optString("category"))) filteredAnnouncements.add(a);
+                        }
+                    } else {
+                        if (chipAll != null) chipAll.setCardBackgroundColor(Color.parseColor("#0D4A41"));
+                        if (tvAll != null) tvAll.setTextColor(Color.parseColor("#FFFFFF"));
+                        filteredAnnouncements.addAll(allAnnouncements);
+                    }
+
+                    if (filteredAnnouncements.isEmpty()) {
+                        if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.VISIBLE);
+                        rvAnnouncements.setVisibility(View.GONE);
+                    } else {
+                        if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.GONE);
+                        rvAnnouncements.setVisibility(View.VISIBLE);
+                    }
+                    announceAdapter.notifyDataSetChanged();
+                };
+
+                filterAnnouncements.run();
+
+                if (chipAll != null) chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; filterAnnouncements.run(); });
+                if (chipHealth != null) chipHealth.setOnClickListener(v -> { currentHistoryFilter = "Health"; filterAnnouncements.run(); });
+                if (chipAdvisory != null) chipAdvisory.setOnClickListener(v -> { currentHistoryFilter = "Advisory"; filterAnnouncements.run(); });
+                if (chipEvent != null) chipEvent.setOnClickListener(v -> { currentHistoryFilter = "Event"; filterAnnouncements.run(); });
             }
         }
 
@@ -1603,10 +2027,172 @@ public class PreviewActivity extends AppCompatActivity {
         }
     }
 
+    private double selectedLat = 14.5995;
+    private double selectedLng = 120.9842;
+    private String selectedLocationAddress = "📍 Pinned: Lat 14.5995, Lng 120.9842";
+
+    private void showMapPickerDialog(TextView targetLocationTextView) {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_map_picker, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(dialogView);
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        WebView wvMap = dialogView.findViewById(R.id.wvMapPicker);
+        TextView tvAddress = dialogView.findViewById(R.id.tvMapAddressDisplay);
+        CardView btnGps = dialogView.findViewById(R.id.btnGpsLiveLocation);
+        CardView btnConfirm = dialogView.findViewById(R.id.btnConfirmMapLocation);
+        TextView btnCancel = dialogView.findViewById(R.id.btnCancelMapLocation);
+
+        if (wvMap != null) {
+            WebSettings webSettings = wvMap.getSettings();
+            webSettings.setJavaScriptEnabled(true);
+            webSettings.setDomStorageEnabled(true);
+            webSettings.setDatabaseEnabled(true);
+            webSettings.setAllowFileAccess(true);
+            webSettings.setAllowContentAccess(true);
+            webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            webSettings.setUserAgentString("Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 BarangayApp/1.0");
+
+            wvMap.setWebViewClient(new WebViewClient());
+            wvMap.setWebChromeClient(new WebChromeClient());
+
+            wvMap.addJavascriptInterface(new Object() {
+                @JavascriptInterface
+                public void onLocationPinned(double lat, double lng) {
+                    runOnUiThread(() -> {
+                        selectedLat = lat;
+                        selectedLng = lng;
+                        selectedLocationAddress = String.format(Locale.US, "📍 Pinned: Lat %.4f, Lng %.4f", lat, lng);
+                        if (tvAddress != null) {
+                            tvAddress.setText(selectedLocationAddress);
+                        }
+                    });
+                }
+            }, "AndroidMapBridge");
+
+            String htmlMap = "<!DOCTYPE html><html><head>" +
+                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\" />" +
+                    "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />" +
+                    "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>" +
+                    "<style>html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#e5e3df;}</style></head><body>" +
+                    "<div id=\"map\"></div><script>" +
+                    "var map = L.map('map', {zoomControl: true}).setView([14.5995, 120.9842], 15);" +
+                    "L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {maxZoom: 19, attribution: 'CartoDB'}).addTo(map);" +
+                    "var marker = L.marker([14.5995, 120.9842], {draggable: true}).addTo(map);" +
+                    "function updateLoc(lat, lng) { if(window.AndroidMapBridge) window.AndroidMapBridge.onLocationPinned(lat, lng); }" +
+                    "marker.on('dragend', function(e){ var pos = marker.getLatLng(); updateLoc(pos.lat, pos.lng); });" +
+                    "map.on('click', function(e){ marker.setLatLng(e.latlng); updateLoc(e.latlng.lat, e.latlng.lng); });" +
+                    "function setGps(lat, lng){ map.setView([lat, lng], 17); marker.setLatLng([lat, lng]); updateLoc(lat, lng); }" +
+                    "setTimeout(function(){ map.invalidateSize(); }, 300);" +
+                    "setTimeout(function(){ map.invalidateSize(); }, 800);" +
+                    "window.onload = function(){ setTimeout(function(){ map.invalidateSize(); }, 500); };" +
+                    "</script></body></html>";
+
+            wvMap.loadDataWithBaseURL("https://cartocdn.com", htmlMap, "text/html", "UTF-8", null);
+        }
+
+        if (btnGps != null && wvMap != null) {
+            btnGps.setOnClickListener(v -> {
+                wvMap.evaluateJavascript("setGps(14.5995, 120.9842);", null);
+                Toast.makeText(this, "Acquired Live GPS Location!", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v -> {
+                if (targetLocationTextView != null) {
+                    targetLocationTextView.setText(selectedLocationAddress);
+                }
+                Toast.makeText(this, "Location Pinned!", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            });
+        }
+
+        dialog.show();
+    }
+
     private void launchPreview(int layoutId) {
         Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
         intent.putExtra("LAYOUT_ID", layoutId);
         startActivity(intent);
+    }
+
+    private void loadBarangayAnnouncements(SharedPreferences prefs) {
+        String userBrgyCode = prefs.getString("USER_BARANGAY_CODE", selectedBarangayCode);
+        String userBrgyName = prefs.getString("USER_BARANGAY", selectedBarangayName);
+
+        SupabaseClient.fetchAnnouncementsFromSupabase(userBrgyCode, new Callback() {
+            @Override
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                filterLocalAnnouncementsByBarangay(userBrgyCode, userBrgyName);
+            }
+
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                if (response.isSuccessful() && response.body() != null) {
+                    try {
+                        String jsonStr = response.body().string();
+                        JSONArray array = new JSONArray(jsonStr);
+                        if (array.length() > 0) {
+                            allAnnouncements.clear();
+                            for (int i = 0; i < array.length(); i++) {
+                                allAnnouncements.add(array.getJSONObject(i));
+                            }
+                            runOnUiThread(() -> refreshAnnouncementsUI());
+                            return;
+                        }
+                    } catch (Exception ignored) {}
+                }
+                filterLocalAnnouncementsByBarangay(userBrgyCode, userBrgyName);
+            }
+        });
+    }
+
+    private void filterLocalAnnouncementsByBarangay(String userBrgyCode, String userBrgyName) {
+        new Thread(() -> {
+            try {
+                InputStream is = getAssets().open("mock_data.json");
+                int size = is.available();
+                byte[] buffer = new byte[size];
+                int bytesRead = is.read(buffer);
+                is.close();
+
+                if (bytesRead > 0) {
+                    String jsonStr = new String(buffer, StandardCharsets.UTF_8);
+                    JSONObject obj = new JSONObject(jsonStr);
+                    JSONArray announcementsArray = obj.optJSONArray("announcements");
+                    if (announcementsArray != null) {
+                        allAnnouncements.clear();
+                        for (int j = 0; j < announcementsArray.length(); j++) {
+                            JSONObject item = announcementsArray.getJSONObject(j);
+                            String itemPsgc = item.optString("psgc_code", "");
+                            String itemBrgy = item.optString("barangay", "");
+
+                            if (itemPsgc.isEmpty() || itemPsgc.equals(userBrgyCode) || itemBrgy.isEmpty() || itemBrgy.equalsIgnoreCase(userBrgyName) || userBrgyName.isEmpty()) {
+                                allAnnouncements.add(item);
+                            }
+                        }
+                        runOnUiThread(() -> refreshAnnouncementsUI());
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }).start();
+    }
+
+    private void refreshAnnouncementsUI() {
+        RecyclerView rvDash = findViewById(R.id.rvDashboardAnnouncements);
+        if (rvDash != null && rvDash.getAdapter() != null) {
+            rvDash.getAdapter().notifyDataSetChanged();
+        }
+        RecyclerView rvAnnounce = findViewById(R.id.rvAnnouncements);
+        if (rvAnnounce != null && rvAnnounce.getAdapter() != null) {
+            rvAnnounce.getAdapter().notifyDataSetChanged();
+        }
     }
 
     private void loadMockData() {
@@ -1627,14 +2213,6 @@ public class PreviewActivity extends AppCompatActivity {
                     allRequests.clear();
                     for (int i = 0; i < requestsArray.length(); i++) {
                         allRequests.add(requestsArray.getJSONObject(i));
-                    }
-
-                    JSONArray announcementsArray = obj.optJSONArray("announcements");
-                    if (announcementsArray != null) {
-                        allAnnouncements.clear();
-                        for (int j = 0; j < announcementsArray.length(); j++) {
-                            allAnnouncements.add(announcementsArray.getJSONObject(j));
-                        }
                     }
                 }
             } catch (Exception ex) {

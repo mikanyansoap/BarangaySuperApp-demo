@@ -13,7 +13,8 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="16dp"
+        android:paddingTop="40dp"
+        android:paddingBottom="16dp"
         android:background="#FFFFFF"
         android:elevation="4dp">
 
@@ -58,7 +59,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingHorizontal="24dp"
-            android:paddingTop="32dp"
+            android:paddingTop="20dp"
             android:paddingBottom="40dp">
 
             <TextView
@@ -145,7 +146,7 @@
                         android:inputType="textMultiLine" />
                 </androidx.cardview.widget.CardView>
 
-                <!-- Location Button (For Nominatim API Integration) -->
+                <!-- Location Button -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -174,22 +175,21 @@
                         android:orientation="horizontal"
                         android:paddingHorizontal="16dp">
 
-                        <!-- Location Pin Icon Placeholder -->
-                        <View
+                        <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:background="#AAB3AE" />
+                            android:src="@drawable/ic_report"
+                            app:tint="#247D76" />
 
-                        <!-- This text view can be updated dynamically with the Nominatim API result -->
                         <TextView
                             android:id="@+id/tvLocationAddress"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:layout_marginStart="12dp"
-                            android:text="Use current location"
-                            android:textColor="#737973"
-                            android:textSize="16sp"
+                            android:text="📍 Pin / Get Current Location (Lat: 14.5995, Lng: 120.9842)"
+                            android:textColor="#247D76"
+                            android:textSize="14sp"
                             android:maxLines="1"
                             android:ellipsize="end" />
                     </LinearLayout>
@@ -223,11 +223,11 @@
                         android:gravity="center"
                         android:orientation="horizontal">
 
-                        <!-- Camera Icon Placeholder -->
-                        <View
+                        <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:background="#AAB3AE" />
+                            android:src="@drawable/ic_add"
+                            app:tint="#247D76" />
 
                         <TextView
                             android:id="@+id/tvAddPhotoText"

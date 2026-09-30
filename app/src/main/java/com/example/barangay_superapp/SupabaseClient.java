@@ -6,8 +6,10 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.Locale;
 
 public class SupabaseClient {
@@ -24,6 +26,59 @@ public class SupabaseClient {
                 .addHeader("apikey", SUPABASE_PUBLIC_KEY)
                 .addHeader("Authorization", "Bearer " + SUPABASE_PUBLIC_KEY)
                 .addHeader("Content-Type", "application/json");
+    }
+
+    public interface StorageUploadCallback {
+        void onSuccess(String publicUrl);
+        void onError(String error);
+    }
+
+    // Uploads file bytes directly to Supabase Storage Bucket and returns public URL
+    public static void uploadToStorageBucket(String bucketName, String fileName, byte[] fileBytes, String mimeType, StorageUploadCallback callback) {
+        try {
+            String endpoint = "/storage/v1/object/" + bucketName + "/" + fileName;
+            RequestBody body = RequestBody.create(fileBytes, MediaType.parse(mimeType != null ? mimeType : "image/jpeg"));
+
+            Request request = new Request.Builder()
+                    .url(SUPABASE_URL + endpoint)
+                    .addHeader("apikey", SUPABASE_PUBLIC_KEY)
+                    .addHeader("Authorization", "Bearer " + SUPABASE_PUBLIC_KEY)
+                    .addHeader("x-upsert", "true")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    callback.onError(e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    String publicUrl = SUPABASE_URL + "/storage/v1/object/public/" + bucketName + "/" + fileName;
+                    callback.onSuccess(publicUrl);
+                }
+            });
+        } catch (Exception e) {
+            callback.onError(e.getMessage());
+        }
+    }
+
+    // Updates id_photo_url in public.users table
+    public static void updateUserProfilePhoto(String userId, String publicPhotoUrl, Callback callback) {
+        try {
+            JSONObject bodyJson = new JSONObject();
+            bodyJson.put("id_photo_url", publicPhotoUrl);
+
+            RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = getAuthenticatedBuilder("/rest/v1/users?id=eq." + userId)
+                    .patch(body)
+                    .build();
+
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // Converts MM/DD/YYYY to YYYY-MM-DD for PostgreSQL DATE column
@@ -54,9 +109,9 @@ public class SupabaseClient {
             bodyJson.put("email", userData.optString("email", ""));
             bodyJson.put("password_hash", password);
             bodyJson.put("province", userData.optString("province", "Metro Manila (NCR)"));
-            bodyJson.put("city", userData.optString("city", "City"));
-            bodyJson.put("barangay_id", userData.optString("barangay_id", "Brgy"));
-            bodyJson.put("address", userData.optString("address", "Barangay Area"));
+            bodyJson.put("city", userData.optString("city", "Taguig City"));
+            bodyJson.put("barangay_id", userData.optString("barangay_id", "137607010"));
+            bodyJson.put("address", userData.optString("address", "Brgy. Napindan"));
             bodyJson.put("id_type", userData.optString("id_type", "Passport"));
             
             String rawDob = userData.optString("dob", "10/25/2007");
@@ -69,11 +124,40 @@ public class SupabaseClient {
             bodyJson.put("marital_status", rawCivil.isEmpty() ? "Single" : rawCivil);
             
             bodyJson.put("region", userData.optString("region", "NCR"));
-            bodyJson.put("verification_status", "pending");
+            bodyJson.put("verification_status", userData.optString("verification_status", "approved"));
             bodyJson.put("role", "resident");
 
             RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
             Request request = getAuthenticatedBuilder("/rest/v1/users")
+                    .addHeader("Prefer", "return=minimal")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Inserts a new request directly into Supabase requests table
+    public static void submitRequestToSupabase(String userId, String psgcCode, String category, String title, String description, String locationAddress, double lat, double lng, Callback callback) {
+        try {
+            JSONObject bodyJson = new JSONObject();
+            if (userId != null && !userId.isEmpty()) {
+                bodyJson.put("user_id", userId);
+            }
+            bodyJson.put("psgc_code", psgcCode != null && !psgcCode.isEmpty() ? psgcCode : "137607010");
+            bodyJson.put("category", category); // 'document', 'report', 'disaster', 'barangay_id'
+            bodyJson.put("status", "pending");
+            bodyJson.put("priority", "medium");
+            bodyJson.put("title", title);
+            bodyJson.put("description", description);
+            bodyJson.put("location_address", locationAddress);
+            bodyJson.put("latitude", lat);
+            bodyJson.put("longitude", lng);
+
+            RequestBody body = RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = getAuthenticatedBuilder("/rest/v1/requests")
                     .addHeader("Prefer", "return=minimal")
                     .post(body)
                     .build();
@@ -133,6 +217,20 @@ public class SupabaseClient {
                     .post(body)
                     .build();
 
+            client.newCall(request).enqueue(callback);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Fetches announcements from Supabase REST API filtered by PSGC Code
+    public static void fetchAnnouncementsFromSupabase(String psgcCode, Callback callback) {
+        try {
+            String endpoint = "/rest/v1/announcements?select=*&order=created_at.desc";
+            if (psgcCode != null && !psgcCode.isEmpty()) {
+                endpoint = "/rest/v1/announcements?select=*&or=(psgc_code.eq." + psgcCode + ",psgc_code.is.null)&order=created_at.desc";
+            }
+            Request request = getAuthenticatedBuilder(endpoint).get().build();
             client.newCall(request).enqueue(callback);
         } catch (Exception e) {
             e.printStackTrace();
