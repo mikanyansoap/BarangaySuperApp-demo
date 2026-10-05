@@ -19,6 +19,11 @@ public class GeminiApiClient {
     private static final String URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
     private static final OkHttpClient client = new OkHttpClient();
 
+    /** True once a real Gemini API key has been pasted into API_KEY. */
+    public static boolean isConfigured() {
+        return API_KEY != null && !API_KEY.isEmpty() && !API_KEY.startsWith("YOUR_");
+    }
+
     public interface ChatCallback {
         void onSuccess(String responseText);
         void onError(String errorMessage);
@@ -80,13 +85,59 @@ public class GeminiApiClient {
         }
     }
 
+    /**
+     * Sends a single prompt and returns the raw model text. Unlike sendMessage() this reports
+     * errors via onError (no canned fallback), so callers can use their own fallback.
+     * @param jsonOutput ask Gemini to reply with JSON only
+     */
+    public static void generate(String prompt, boolean jsonOutput, ChatCallback callback) {
+        if (!isConfigured()) {
+            callback.onError("Gemini API key not set");
+            return;
+        }
+        try {
+            JSONObject textPart = new JSONObject().put("text", prompt);
+            JSONObject partsObj = new JSONObject().put("parts", new JSONArray().put(textPart));
+            JSONObject bodyJson = new JSONObject().put("contents", new JSONArray().put(partsObj));
+            if (jsonOutput) {
+                bodyJson.put("generationConfig", new JSONObject().put("responseMimeType", "application/json"));
+            }
+            Request request = new Request.Builder()
+                    .url(URL)
+                    .addHeader("X-goog-api-key", API_KEY)
+                    .post(RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .build();
+            client.newCall(request).enqueue(new Callback() {
+                @Override public void onFailure(Call call, IOException e) {
+                    callback.onError(e.getMessage() != null ? e.getMessage() : "Network error");
+                }
+                @Override public void onResponse(Call call, Response response) throws IOException {
+                    String body = response.body() != null ? new String(response.body().bytes(), java.nio.charset.StandardCharsets.UTF_8) : "";
+                    if (!response.isSuccessful()) {
+                        callback.onError("HTTP " + response.code());
+                        return;
+                    }
+                    try {
+                        String text = new JSONObject(body).getJSONArray("candidates").getJSONObject(0)
+                                .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text");
+                        callback.onSuccess(text.trim());
+                    } catch (Exception e) {
+                        callback.onError("Bad response");
+                    }
+                }
+            });
+        } catch (Exception e) {
+            callback.onError(e.getMessage());
+        }
+    }
+
     // Smart Local Barangay AI Assistant logic for instant & reliable responses
     private static String getSmartBarangayResponse(String userMessage) {
         String msg = userMessage.toLowerCase();
         if (msg.contains("renew") || msg.contains("clearance") || msg.contains("indigency") || msg.contains("permit") || msg.contains("document") || msg.contains("kelangan") || msg.contains("kailangan") || msg.contains("kumuha") || msg.contains("request")) {
             return "Sure! I can help you process your document request right now. What is the specific purpose for your document (e.g. Employment, Personal, ID requirement)?";
         } else if (msg.contains("report") || msg.contains("reklamo") || msg.contains("ingay") || msg.contains("disaster") || msg.contains("baha") || msg.contains("sunog")) {
-            return "I can assist you in filing an official report right away. Please describe what happened and the location of the incident.";
+            return "I can help you file an official report. Type \"gumawa ng report\" and I'll ask you a few quick questions, then prepare the report for you to review.";
         } else if (msg.contains("employment") || msg.contains("id") || msg.contains("work") || msg.contains("personal") || msg.contains("purok") || msg.contains("street") || msg.contains("kalsada") || msg.contains("tapat")) {
             int randomId = (int)(Math.random() * 9000 + 1000);
             return "Thank you! I have registered your request into the system under Request ID: REQ-2026-" + randomId + ".\n\nOur Barangay Officials have received your submission. You can track its live status anytime under the History tab!";
@@ -98,4 +149,4 @@ public class GeminiApiClient {
             return "Salamat sa iyong mensahe! Naka-record na ito sa ating Barangay Assistant. Maaari ninyong gamitin ang ating app para sa document requests, blotter reports, at emergency contacts.";
         }
     }
-}
+}

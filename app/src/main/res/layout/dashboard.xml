@@ -81,7 +81,6 @@
                                 android:layout_height="match_parent"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/ic_person"
-                                app:tint="#247D76"
                                 android:contentDescription="Profile Header Picture" />
                         </androidx.cardview.widget.CardView>
                     </LinearLayout>

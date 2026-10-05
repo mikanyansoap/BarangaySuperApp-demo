@@ -9,9 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
-  <!-- Leaflet: map for report locations (CARTO basemap tiles) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -26,6 +25,12 @@
 </div>
 
 <script type="module" src="js/app.js"></script>
+
+<form id="loginForm">
+  <input type="email" id="loginEmail" placeholder="Enter email" required />
+  <input type="password" id="loginPassword" placeholder="Enter password" required />
+  <button type="submit" id="loginBtn">Sign In</button>
+</form>
 
 </body>
 </html>

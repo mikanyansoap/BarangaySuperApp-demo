@@ -107,8 +107,6 @@ public class PreviewActivity extends AppCompatActivity {
     private final List<JSONObject> allRequests = new ArrayList<>();
     private final List<JSONObject> filteredRequests = new ArrayList<>();
     private final List<JSONObject> allAnnouncements = new ArrayList<>();
-    /** Set by the Announcements screen so its filtered list refreshes when the data arrives. */
-    private Runnable onAnnouncementsUpdated;
     
     private TextView currentUploadTextView;
     private String currentUploadBucket = "request-evidence";
@@ -705,11 +703,8 @@ public class PreviewActivity extends AppCompatActivity {
                     // Goes to public.reports (what the barangay web admin reads)
                     String reportDesc = details + "\n\nLocation: " + locAddress
                             + (locationPinned ? String.format(Locale.US, "\nMap pin: %.6f, %.6f", selectedLat, selectedLng) : "");
-                    SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Complaint", cat, reportDesc, "medium",
-                            firstRemoteUrl(attachments),
-                            locationPinned ? Double.valueOf(selectedLat) : null,
-                            locationPinned ? Double.valueOf(selectedLng) : null,
-                            locAddress, rememberSupabaseId(localId, "reports"));
+                    SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Complaint", cat, reportDesc, "MEDIUM",
+                            firstRemoteUrl(attachments), rememberSupabaseId(localId, "reports"));
 
                     Toast.makeText(this, "Report Submitted Successfully! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
@@ -788,11 +783,8 @@ public class PreviewActivity extends AppCompatActivity {
                     String userId = prefs.getString("USER_ID", "");
                     String disasterDesc = detailsText + "\n\nLocation: " + finalLoc
                             + (locationPinned ? String.format(Locale.US, "\nMap pin: %.6f, %.6f", selectedLat, selectedLng) : "");
-                    SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Incident", disasterType, disasterDesc, "high",
-                            firstRemoteUrl(attachments),
-                            locationPinned ? Double.valueOf(selectedLat) : null,
-                            locationPinned ? Double.valueOf(selectedLng) : null,
-                            finalLoc, rememberSupabaseId(localId, "reports"));
+                    SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Incident", disasterType, disasterDesc, "HIGH",
+                            firstRemoteUrl(attachments), rememberSupabaseId(localId, "reports"));
 
                     Toast.makeText(this, "Disaster Incident Reported! (" + reqId + ")", Toast.LENGTH_LONG).show();
                     launchPreview(R.layout.request_history);
@@ -1208,9 +1200,9 @@ public class PreviewActivity extends AppCompatActivity {
                         userData.put("civil_status", civilStatus);
                         userData.put("street", street);
                         userData.put("barangay", brgyName);
-                        userData.put("psgc_code", SupabaseClient.dbPsgc(brgyCode));       // always the 10-digit PSGC code
+                        userData.put("psgc_code", brgyCode);                              // 10-digit code from the PSGC JSON
                         String legacyCode = PSGCClient.toLegacyCode(brgyCode);
-                        userData.put("barangay_id", legacyCode.isEmpty() ? brgyCode : legacyCode); // old column, kept for compatibility
+                        userData.put("barangay_id", legacyCode.isEmpty() ? brgyCode : legacyCode); // 9-digit code used in Supabase
                         userData.put("city", city);
                         userData.put("province", province);
                         userData.put("region", region);
@@ -1218,8 +1210,8 @@ public class PreviewActivity extends AppCompatActivity {
                         userData.put("current_address", fullAddress);
                         userData.put("provincial_address", province);
                         userData.put("id_type", idType);
-                        // No role / approval status here: the database makes every new account a
-                        // pending resident, and only an official of this barangay can approve it.
+                        userData.put("verification_status", "approved");
+                        userData.put("role", "resident");
 
                         SupabaseClient.signUpUser(email, password, userData, new Callback() {
                             @Override
@@ -1264,8 +1256,7 @@ public class PreviewActivity extends AppCompatActivity {
                                                 .putString("USER_PROVINCE", province)
                                                 .putString("USER_REGION", finalRegion)
                                                 .putString("USER_ADDRESS", fullAddress)
-                                                // New accounts are pending until an official approves them
-                                                .putBoolean("IS_LOGGED_IN", false);
+                                                .putBoolean("IS_LOGGED_IN", hasSession);
                                         if (!userId.isEmpty()) ed.putString("USER_ID", userId);
                                         ed.apply();
 
@@ -1577,17 +1568,15 @@ public class PreviewActivity extends AppCompatActivity {
                 btnProfilePicture.setOnClickListener(v -> launchPreview(R.layout.profile));
             }
 
-            // If the barangay rejected the account (or it went back to pending), sign out
-            verifyAccountStillApproved(prefs);
+            // Fetch announcements based on user's Barangay PSGC code
+            loadBarangayAnnouncements(prefs);
 
             TextView tvWeatherDate = findViewById(R.id.tvWeatherDate);
             ImageView ivWeatherIcon = findViewById(R.id.ivWeatherIcon);
             fetchLiveWeather(tvWeatherDate, ivWeatherIcon);
 
-            // The adapter must exist BEFORE the data arrives (it loads asynchronously),
-            // otherwise the list never shows anything.
             RecyclerView rvDashboardAnnouncements = findViewById(R.id.rvDashboardAnnouncements);
-            if (rvDashboardAnnouncements != null) {
+            if (rvDashboardAnnouncements != null && !allAnnouncements.isEmpty()) {
                 RecyclerView.Adapter<RecyclerView.ViewHolder> dashAnnounceAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     @NonNull
                     @Override
@@ -1630,9 +1619,6 @@ public class PreviewActivity extends AppCompatActivity {
                 rvDashboardAnnouncements.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
                 rvDashboardAnnouncements.setAdapter(dashAnnounceAdapter);
             }
-
-            // Fetch announcements for the user's barangay (PSGC code)
-            loadBarangayAnnouncements(prefs);
 
             CardView cardDashboardReport = findViewById(R.id.cardDashboardReport);
             CardView cardDashboardRequest = findViewById(R.id.cardDashboardRequest);
@@ -1844,11 +1830,6 @@ public class PreviewActivity extends AppCompatActivity {
 
                 filterAnnouncements.run();
 
-                // This screen is its own Activity, so it has to load the announcements itself;
-                // re-run the filter when they arrive.
-                onAnnouncementsUpdated = filterAnnouncements;
-                loadBarangayAnnouncements(prefs);
-
                 if (chipAll != null) chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; filterAnnouncements.run(); });
                 if (chipHealth != null) chipHealth.setOnClickListener(v -> { currentHistoryFilter = "Health"; filterAnnouncements.run(); });
                 if (chipAdvisory != null) chipAdvisory.setOnClickListener(v -> { currentHistoryFilter = "Advisory"; filterAnnouncements.run(); });
@@ -2026,9 +2007,6 @@ public class PreviewActivity extends AppCompatActivity {
                 };
 
                 updateUI.run();
-
-                // Show what the barangay did on the web portal (in progress, ready for pickup, resolved...)
-                syncHistoryStatuses(prefs, updateUI);
 
                 chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; updateUI.run(); });
                 chipDocs.setOnClickListener(v -> { currentHistoryFilter = "Documents"; updateUI.run(); });
@@ -3224,12 +3202,11 @@ public class PreviewActivity extends AppCompatActivity {
         // A real app name, NOT the package name: OSM blocks generic ids like "com.example.*" (that was the 403 "Access blocked")
         Configuration.getInstance().setUserAgentValue("BarangaySuperApp/1.0 (Android)");
         // drop every older tile cache - they contain the cached "Access blocked" images from tile.openstreetmap.org
-        // ("osmdroid_voyager" holds the cached "API KEY REQUIRED" tiles from before the CARTO key was added)
-        for (String old : new String[]{"osmdroid", "osmdroid_carto", "osmdroid_voyager"}) {
+        for (String old : new String[]{"osmdroid", "osmdroid_carto"}) {
             File oldOsmCache = new File(getCacheDir(), old);
             if (oldOsmCache.exists()) deleteRecursively(oldOsmCache);
         }
-        File osmBase = new File(getCacheDir(), "osmdroid_carto_key");
+        File osmBase = new File(getCacheDir(), "osmdroid_voyager");
         if (!osmBase.exists()) osmBase.mkdirs();
         Configuration.getInstance().setOsmdroidBasePath(osmBase);
         Configuration.getInstance().setOsmdroidTileCache(new File(osmBase, "tiles"));
@@ -3246,8 +3223,15 @@ public class PreviewActivity extends AppCompatActivity {
         TextView btnCancel = dialogView.findViewById(R.id.btnCancelMapLocation);
 
         // OSM's own tile server (TileSourceFactory.MAPNIK) blocks apps -> 403 "Access blocked" tiles.
-        // CARTO Voyager renders the same OpenStreetMap data; it needs the API key on every tile URL (see MapConfig).
-        map.setTileSource(MapConfig.cartoVoyager());
+        // CARTO Voyager renders the same OpenStreetMap data, needs no API key and allows mobile apps.
+        map.setTileSource(new org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "CartoVoyager", 0, 20, 256, ".png",
+                new String[]{
+                        "https://a.basemaps.cartocdn.com/rastertiles/voyager/",
+                        "https://b.basemaps.cartocdn.com/rastertiles/voyager/",
+                        "https://c.basemaps.cartocdn.com/rastertiles/voyager/",
+                        "https://d.basemaps.cartocdn.com/rastertiles/voyager/"},
+                "\u00A9 OpenStreetMap contributors, \u00A9 CARTO"));
         map.setMultiTouchControls(true);
         map.setTilesScaledToDpi(true);
         map.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT);
@@ -3420,98 +3404,70 @@ public class PreviewActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
     }
 
-    /**
-     * Loads the announcements of the user's barangay from Supabase.
-     * The barangay comes from the user's profile (psgc_code); the database only returns rows whose
-     * psgc_code matches the signed-in user's profile (RLS), so officials' posts reach exactly their residents.
-     * No mock data fallback: if nothing is posted (or the network fails) the screen shows its empty state.
-     */
     private void loadBarangayAnnouncements(SharedPreferences prefs) {
-        String userBrgyCode = SupabaseClient.dbPsgc(prefs.getString("USER_BARANGAY_CODE", selectedBarangayCode));
+        String userBrgyCode = prefs.getString("USER_BARANGAY_CODE", selectedBarangayCode);
+        String userBrgyName = prefs.getString("USER_BARANGAY", selectedBarangayName);
 
         SupabaseClient.fetchAnnouncementsFromSupabase(userBrgyCode, new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                android.util.Log.e("Announcements", "Load failed: " + e.getMessage());
+                filterLocalAnnouncementsByBarangay(userBrgyCode, userBrgyName);
             }
 
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String body = response.body() != null ? new String(response.body().bytes(), StandardCharsets.UTF_8) : "";
-                if (!response.isSuccessful()) {
-                    android.util.Log.e("Announcements", "HTTP " + response.code() + ": " + body);
-                    return;
+                if (response.isSuccessful() && response.body() != null) {
+                    try {
+                        String jsonStr = response.body().string();
+                        JSONArray array = new JSONArray(jsonStr);
+                        if (array.length() > 0) {
+                            allAnnouncements.clear();
+                            for (int i = 0; i < array.length(); i++) {
+                                allAnnouncements.add(array.getJSONObject(i));
+                            }
+                            runOnUiThread(() -> refreshAnnouncementsUI());
+                            return;
+                        }
+                    } catch (Exception ignored) {}
                 }
-                List<JSONObject> rows = new ArrayList<>();
-                try {
-                    JSONArray array = new JSONArray(body);
-                    String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
-                    for (int i = 0; i < array.length(); i++) {
-                        JSONObject row = array.getJSONObject(i);
-                        if (row.optBoolean("is_archived", false)) continue;           // archived on the web portal
-                        String eventDate = row.isNull("event_date") ? "" : row.optString("event_date", "");
-                        if (!eventDate.isEmpty() && eventDate.compareTo(today) < 0) continue; // past event (same rule as the web)
-                        rows.add(toDisplayAnnouncement(row));
-                    }
-                } catch (Exception e) {
-                    android.util.Log.e("Announcements", "Parse failed: " + e.getMessage());
-                    return;
-                }
-                runOnUiThread(() -> {
-                    allAnnouncements.clear();
-                    allAnnouncements.addAll(rows);
-                    refreshAnnouncementsUI();
-                });
+                filterLocalAnnouncementsByBarangay(userBrgyCode, userBrgyName);
             }
         });
     }
 
-    /** Maps a public.announcements row to the fields the dashboard / list / details dialog read. */
-    private static JSONObject toDisplayAnnouncement(JSONObject row) throws org.json.JSONException {
-        JSONObject a = new JSONObject(row.toString());
-        String category = row.optString("category", "");
-        if (category.isEmpty() || "null".equals(category)) category = row.optString("type", "General");
-        if (category.isEmpty() || "null".equals(category)) category = "General";
-        category = category.substring(0, 1).toUpperCase(Locale.US) + category.substring(1);
-        a.put("category", category);
+    private void filterLocalAnnouncementsByBarangay(String userBrgyCode, String userBrgyName) {
+        new Thread(() -> {
+            try {
+                InputStream is = getAssets().open("mock_data.json");
+                int size = is.available();
+                byte[] buffer = new byte[size];
+                int bytesRead = is.read(buffer);
+                is.close();
 
-        String colorHex = "#247D76", bgHex = "#DFF2F0";              // Health / General
-        if ("Advisory".equalsIgnoreCase(category)) { colorHex = "#CC4E42"; bgHex = "#FCEBEA"; }
-        else if ("Event".equalsIgnoreCase(category)) { colorHex = "#DBA03B"; bgHex = "#FDF1DA"; }
-        a.put("categoryColorHex", colorHex);
-        a.put("categoryBgHex", bgHex);
+                if (bytesRead > 0) {
+                    String jsonStr = new String(buffer, StandardCharsets.UTF_8);
+                    JSONObject obj = new JSONObject(jsonStr);
+                    JSONArray announcementsArray = obj.optJSONArray("announcements");
+                    if (announcementsArray != null) {
+                        allAnnouncements.clear();
+                        for (int j = 0; j < announcementsArray.length(); j++) {
+                            JSONObject item = announcementsArray.getJSONObject(j);
+                            String itemPsgc = item.optString("psgc_code", "");
+                            String itemBrgy = item.optString("barangay", "");
 
-        String posted = formatIsoDate(row.optString("created_at", ""), true);
-        a.put("date", posted.isEmpty() ? "Recently" : posted);
-
-        String body = row.isNull("body") ? "" : row.optString("body", "");
-        if (body.isEmpty()) body = row.optString("description", "");
-        String eventDate = row.isNull("event_date") ? "" : row.optString("event_date", "");
-        if (!eventDate.isEmpty()) {
-            String when = formatIsoDate(eventDate, false);
-            String time = row.isNull("event_time") ? "" : row.optString("event_time", "");
-            body = "📅 " + (when.isEmpty() ? eventDate : when) + (time.isEmpty() ? "" : " · " + time) + "\n\n" + body;
-        }
-        a.put("description", body);
-        return a;
-    }
-
-    /** "2026-10-05T07:30:00+00:00" or "2026-10-05" -> "Oct 5, 2026" in the phone's time zone. */
-    private static String formatIsoDate(String iso, boolean hasTime) {
-        if (iso == null || iso.length() < 10 || "null".equals(iso)) return "";
-        try {
-            Date d;
-            if (hasTime && iso.length() >= 19) {
-                SimpleDateFormat in = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
-                in.setTimeZone(java.util.TimeZone.getTimeZone("UTC")); // Supabase timestamps are UTC
-                d = in.parse(iso.substring(0, 19).replace(' ', 'T'));
-            } else {
-                d = new SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso.substring(0, 10));
+                            boolean sameCode = !userBrgyCode.isEmpty() && (itemPsgc.equals(userBrgyCode)
+                                    || itemPsgc.equals(PSGCClient.toLegacyCode(userBrgyCode)) || itemPsgc.equals(PSGCClient.toModernCode(userBrgyCode)));
+                            if (itemPsgc.isEmpty() || sameCode || itemBrgy.isEmpty() || itemBrgy.equalsIgnoreCase(userBrgyName) || userBrgyName.isEmpty()) {
+                                allAnnouncements.add(item);
+                            }
+                        }
+                        runOnUiThread(() -> refreshAnnouncementsUI());
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
-            return d != null ? new SimpleDateFormat("MMM d, yyyy", Locale.US).format(d) : "";
-        } catch (Exception e) {
-            return iso.substring(0, 10);
-        }
+        }).start();
     }
 
     private void refreshAnnouncementsUI() {
@@ -3522,152 +3478,6 @@ public class PreviewActivity extends AppCompatActivity {
         RecyclerView rvAnnounce = findViewById(R.id.rvAnnouncements);
         if (rvAnnounce != null && rvAnnounce.getAdapter() != null) {
             rvAnnounce.getAdapter().notifyDataSetChanged();
-        }
-        if (onAnnouncementsUpdated != null) onAnnouncementsUpdated.run();
-    }
-
-    // ====================================================================
-    // ACCOUNT APPROVAL (decided by the barangay officials, stored in profiles.account_status)
-    // ====================================================================
-
-    private static boolean isBlockedStatus(String status) {
-        String s = status == null ? "" : status.trim().toLowerCase(Locale.US);
-        return s.equals("pending") || s.equals("unapproved") || s.equals("rejected");
-    }
-
-    /** Signs the user out locally (tokens + per-user prefs). */
-    private void signOutLocally(SharedPreferences prefs) {
-        SharedPreferences.Editor ed = prefs.edit().putBoolean("IS_LOGGED_IN", false);
-        clearUserPrefs(ed);
-        ed.apply();
-        SupabaseClient.clearSession();
-    }
-
-    /** Sends a pending user to the review screen, a rejected user back to sign in. */
-    private void showAccountNotApproved(SharedPreferences prefs, String status) {
-        String brgy = prefs.getString("USER_BARANGAY", "");
-        signOutLocally(prefs);
-        if ("rejected".equalsIgnoreCase(status)) {
-            Toast.makeText(this, "Your registration was not approved by the barangay. Please contact your barangay hall.", Toast.LENGTH_LONG).show();
-            openAfterSignIn(R.layout.sign_in);
-            return;
-        }
-        Toast.makeText(this, "Account pending review by Barangay Officials.", Toast.LENGTH_LONG).show();
-        Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
-        intent.putExtra("LAYOUT_ID", R.layout.account_review_ntf);
-        if (!brgy.isEmpty()) intent.putExtra("SELECTED_BARANGAY", "Brgy. " + brgy);
-        startActivity(intent);
-        finish();
-    }
-
-    /** Dashboard check: the barangay may have rejected the account, or it went back to pending after a move. */
-    private void verifyAccountStillApproved(SharedPreferences prefs) {
-        String userId = prefs.getString("USER_ID", "");
-        if (userId.isEmpty()) return;
-        SupabaseClient.fetchUserProfileFromSupabase(userId, new Callback() {
-            @Override public void onFailure(@NonNull Call call, @NonNull IOException e) { /* offline: keep going */ }
-            @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!response.isSuccessful() || response.body() == null) return;
-                try {
-                    JSONArray arr = new JSONArray(new String(response.body().bytes(), StandardCharsets.UTF_8));
-                    if (arr.length() == 0) return;
-                    String status = firstNonEmpty(arr.getJSONObject(0), "account_status");
-                    if (isBlockedStatus(status)) runOnUiThread(() -> showAccountNotApproved(prefs, status));
-                } catch (Exception ignored) {}
-            }
-        });
-    }
-
-    // ====================================================================
-    // HISTORY: pull the barangay's status updates for the user's submissions
-    // ====================================================================
-
-    private static String[] statusDisplay(String status) {
-        String s = status == null ? "" : status.trim().toLowerCase(Locale.US);
-        switch (s) {
-            case "in_progress":      return new String[]{"In Progress", "#247D76", "#DDF0EC"};
-            case "ready_for_pickup": return new String[]{"Ready for Pickup", "#247D76", "#DDF0EC"};
-            case "resolved":         return new String[]{"Resolved", "#8D9691", "#DFE2DD"};
-            case "rejected":         return new String[]{"Rejected", "#CC4E42", "#FCEBEA"};
-            case "cancelled":        return new String[]{"Cancelled", "#8D9691", "#DFE2DD"};
-            default:                 return new String[]{"Pending", "#DBA03B", "#FDF1DA"};
-        }
-    }
-
-    /** Reloads the saved history from prefs into allRequests. */
-    private void reloadLocalHistory(SharedPreferences prefs) {
-        try {
-            JSONArray userArray = new JSONArray(prefs.getString("USER_SUBMITTED_REQUESTS", "[]"));
-            allRequests.clear();
-            for (int i = 0; i < userArray.length(); i++) allRequests.add(userArray.getJSONObject(i));
-        } catch (Exception ignored) {}
-    }
-
-    /** Asks Supabase for the current status of every synced submission, saves it, then runs onDone on the UI thread. */
-    private void syncHistoryStatuses(SharedPreferences prefs, Runnable onDone) {
-        Map<String, List<String>> idsByTable = new HashMap<>();
-        try {
-            JSONArray arr = new JSONArray(prefs.getString("USER_SUBMITTED_REQUESTS", "[]"));
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                String id = o.optString("supabase_id", "");
-                if (id.isEmpty()) continue;
-                String table = o.optString("supabase_table", "requests");
-                if (!idsByTable.containsKey(table)) idsByTable.put(table, new ArrayList<>());
-                idsByTable.get(table).add(id);
-            }
-        } catch (Exception e) {
-            return;
-        }
-
-        for (Map.Entry<String, List<String>> entry : idsByTable.entrySet()) {
-            final String table = entry.getKey();
-            SupabaseClient.fetchSubmissionStatuses(table, entry.getValue(), new Callback() {
-                @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                    android.util.Log.w("HistorySync", table + ": " + e.getMessage());
-                }
-                @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                    String body = response.body() != null ? new String(response.body().bytes(), StandardCharsets.UTF_8) : "";
-                    if (!response.isSuccessful()) {
-                        android.util.Log.w("HistorySync", table + " HTTP " + response.code() + ": " + body);
-                        return;
-                    }
-                    try {
-                        JSONArray rows = new JSONArray(body);
-                        Map<String, JSONObject> byId = new HashMap<>();
-                        for (int i = 0; i < rows.length(); i++) {
-                            JSONObject r = rows.getJSONObject(i);
-                            byId.put(r.optString("id"), r);
-                        }
-                        synchronized (PreviewActivity.this) {
-                            JSONArray saved = new JSONArray(prefs.getString("USER_SUBMITTED_REQUESTS", "[]"));
-                            for (int i = 0; i < saved.length(); i++) {
-                                JSONObject o = saved.getJSONObject(i);
-                                if (!table.equals(o.optString("supabase_table", "requests"))) continue;
-                                JSONObject r = byId.get(o.optString("supabase_id"));
-                                if (r == null) continue;
-                                String[] d = statusDisplay(r.optString("status"));
-                                String text = d[0];
-                                String pickup = r.isNull("pickup_date") ? "" : r.optString("pickup_date", "");
-                                if (!pickup.isEmpty()) text += " · Pickup " + formatIsoDate(pickup, false);
-                                o.put("status", d[0]);
-                                o.put("statusText", text);
-                                o.put("statusColorHex", d[1]);
-                                o.put("statusBgHex", d[2]);
-                                String remarks = r.isNull("admin_remarks") ? "" : r.optString("admin_remarks", "");
-                                if (!remarks.isEmpty()) o.put("admin_remarks", remarks);
-                            }
-                            prefs.edit().putString("USER_SUBMITTED_REQUESTS", saved.toString()).apply();
-                        }
-                        runOnUiThread(() -> {
-                            reloadLocalHistory(prefs);
-                            if (onDone != null) onDone.run();
-                        });
-                    } catch (Exception e) {
-                        android.util.Log.w("HistorySync", "parse: " + e.getMessage());
-                    }
-                }
-            });
         }
     }
 
@@ -3898,12 +3708,8 @@ public class PreviewActivity extends AppCompatActivity {
     private void showConfirmAddressChange(SharedPreferences prefs, AlertDialog editDialog, String street, String barangay,
                                           String barangayCode, String city, String province, String region) {
         String fullAddress = SupabaseClient.buildFullAddress(street, barangay, city, province);
-        boolean barangayChanges = !SupabaseClient.dbPsgc(barangayCode)
-                .equals(SupabaseClient.dbPsgc(prefs.getString("USER_BARANGAY_CODE", "")));
         String message = "Your address will be changed to:\n\n" + fullAddress + (region.isEmpty() ? "" : "\n" + region)
-                + "\n\nYour barangay, announcements and requests will follow this new address."
-                + (barangayChanges ? "\n\nBecause this is a different barangay, its officials will need to verify your account again before you can use the app." : "")
-                + " Continue?";
+                + "\n\nYour barangay, announcements and requests will follow this new address. Continue?";
 
         new AlertDialog.Builder(this)
                 .setTitle("Confirm address change")
@@ -3937,21 +3743,9 @@ public class PreviewActivity extends AppCompatActivity {
                         @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                             String body = response.body() != null ? new String(response.body().bytes(), StandardCharsets.UTF_8) : "";
                             boolean ok = response.isSuccessful() && !body.trim().equals("[]"); // [] = RLS blocked / no row
-                            String newStatus = "";
-                            try {
-                                JSONArray rows = new JSONArray(body);
-                                if (rows.length() > 0) newStatus = firstNonEmpty(rows.getJSONObject(0), "account_status");
-                            } catch (Exception ignored) {}
-                            final String status = newStatus;
-                            runOnUiThread(() -> {
-                                if (ok && isBlockedStatus(status)) {
-                                    showAccountNotApproved(prefs, status); // moved barangay -> re-verification
-                                    return;
-                                }
-                                Toast.makeText(PreviewActivity.this,
-                                        ok ? "Address updated!" : "Saved on this device, but your profile wasn't updated on the server (HTTP " + response.code() + ").",
-                                        Toast.LENGTH_LONG).show();
-                            });
+                            runOnUiThread(() -> Toast.makeText(PreviewActivity.this,
+                                    ok ? "Address updated!" : "Saved on this device, but your profile wasn't updated on the server (HTTP " + response.code() + ").",
+                                    Toast.LENGTH_LONG).show());
                         }
                     });
                 })
@@ -4066,30 +3860,36 @@ public class PreviewActivity extends AppCompatActivity {
 
         SharedPreferences.Editor ed = prefs.edit();
         clearUserPrefs(ed); // never keep the previous account's address
-        ed.putBoolean("IS_LOGGED_IN", false); // only set to true once the profile says "approved"
+        ed.putBoolean("IS_LOGGED_IN", true);
         if (!userId.isEmpty()) ed.putString("USER_ID", userId);
         if (!emailStr.isEmpty()) ed.putString("USER_EMAIL", emailStr);
         if (!phoneStr.isEmpty()) ed.putString("USER_PHONE", phoneStr);
         if (meta != null) {
-            applyProfileToPrefs(meta, ed); // baseline from sign-up metadata; the profiles row overrides below
+            applyProfileToPrefs(meta, ed); // baseline from sign-up metadata; profiles row overrides below
         } else if (emailStr.contains("@")) {
             ed.putString("USER_NAME", emailStr.split("@")[0]);
         }
         ed.apply();
 
-        // Approval is decided ONLY by profiles.account_status (set by barangay officials).
-        // user_metadata is written by the app itself, so it is never trusted for this.
-        if (userId.isEmpty()) {
-            signOutLocally(prefs);
-            Toast.makeText(this, "Sign in failed: no user id returned. Please try again.", Toast.LENGTH_LONG).show();
+        String status = meta != null ? meta.optString("verification_status", meta.optString("account_status", "approved")) : "approved";
+        if ("pending".equalsIgnoreCase(status) || "unapproved".equalsIgnoreCase(status)) {
+            Toast.makeText(this, "Account pending review by Barangay Officials.", Toast.LENGTH_LONG).show();
+            openAfterSignIn(R.layout.account_review_ntf);
             return;
         }
 
+        if (userId.isEmpty()) {
+            completeDerivedAddressFields(prefs);
+            openAfterSignIn(R.layout.dashboard);
+            return;
+        }
+
+        final String finalUserId = userId;
         SupabaseClient.fetchUserProfileFromSupabase(userId, new Callback() {
             @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 runOnUiThread(() -> {
-                    signOutLocally(prefs);
-                    Toast.makeText(PreviewActivity.this, "Couldn't check your account: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    completeDerivedAddressFields(prefs);
+                    openAfterSignIn(R.layout.dashboard);
                 });
             }
 
@@ -4104,31 +3904,38 @@ public class PreviewActivity extends AppCompatActivity {
                     }
                 } catch (Exception ignored) {}
 
-                if (row == null) {
-                    runOnUiThread(() -> {
-                        signOutLocally(prefs);
-                        Toast.makeText(PreviewActivity.this, "Your profile could not be found. Please contact your barangay.", Toast.LENGTH_LONG).show();
-                    });
-                    return;
-                }
+                if (row != null) {
+                    // The address was restored from the Auth metadata (it has street/city/province/region, which
+                    // profiles doesn't). Only take the profile's address if the metadata had none.
+                    boolean metaHasAddress = !prefs.getString("USER_BARANGAY_CODE", "").isEmpty();
+                    SharedPreferences.Editor e2 = prefs.edit();
+                    applyProfileToPrefs(row, e2, !metaHasAddress);
+                    e2.apply();
 
-                // The profiles row is the source of truth for the barangay (psgc_code) - it is what the
-                // officials verified and what announcements / reports are matched against.
-                // Street / city / province only exist in the metadata, so those are kept when the row lacks them.
-                String metaCode = SupabaseClient.dbPsgc(prefs.getString("USER_BARANGAY_CODE", ""));
-                String rowCode = SupabaseClient.dbPsgc(firstNonEmpty(row, "psgc_code", "barangay_id"));
-                SharedPreferences.Editor e2 = prefs.edit();
-                if (!rowCode.isEmpty() && !rowCode.equals(metaCode) && firstNonEmpty(row, "barangay", "barangay_name").isEmpty()) {
-                    e2.remove("USER_BARANGAY"); // name from metadata belongs to another barangay -> looked up below
-                }
-                applyProfileToPrefs(row, e2, true);
-                if (!rowCode.isEmpty()) e2.putString("USER_BARANGAY_CODE", rowCode);
-                e2.apply();
+                    // Back-fill: if profiles is out of date (e.g. an earlier save failed), push the current address up
+                    String myCode = prefs.getString("USER_BARANGAY_CODE", "");
+                    boolean profileStale = metaHasAddress && (
+                            !myCode.equals(firstNonEmpty(row, "psgc_code"))
+                            || !prefs.getString("USER_ADDRESS", "").equals(firstNonEmpty(row, "current_address")));
+                    if (profileStale) {
+                        SupabaseClient.syncUserAddressToSupabase(finalUserId,
+                                prefs.getString("USER_STREET", ""), prefs.getString("USER_BARANGAY", ""),
+                                prefs.getString("USER_BARANGAY_CODE", ""), prefs.getString("USER_CITY", ""),
+                                prefs.getString("USER_PROVINCE", ""), prefs.getString("USER_REGION", ""),
+                                new Callback() {
+                                    @Override public void onFailure(@NonNull Call c, @NonNull IOException ex) {}
+                                    @Override public void onResponse(@NonNull Call c, @NonNull Response r) throws IOException { r.close(); }
+                                });
+                    }
 
-                final String rowStatus = firstNonEmpty(row, "account_status");
-                if (isBlockedStatus(rowStatus)) {
-                    runOnUiThread(() -> showAccountNotApproved(prefs, rowStatus));
-                    return;
+                    String rowStatus = firstNonEmpty(row, "verification_status", "account_status");
+                    if ("pending".equalsIgnoreCase(rowStatus) || "unapproved".equalsIgnoreCase(rowStatus)) {
+                        runOnUiThread(() -> {
+                            Toast.makeText(PreviewActivity.this, "Account pending review by Barangay Officials.", Toast.LENGTH_LONG).show();
+                            openAfterSignIn(R.layout.account_review_ntf);
+                        });
+                        return;
+                    }
                 }
 
                 // Barangay name missing but we have the PSGC code -> look it up
@@ -4157,8 +3964,6 @@ public class PreviewActivity extends AppCompatActivity {
     private void openAfterSignIn(int layoutId) {
         if (isFinishing()) return;
         if (layoutId == R.layout.dashboard) {
-            // Only reached after profiles.account_status was checked
-            getSharedPreferences("AppSession", MODE_PRIVATE).edit().putBoolean("IS_LOGGED_IN", true).apply();
             Toast.makeText(this, "Sign In Successful!", Toast.LENGTH_SHORT).show();
         }
         Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);

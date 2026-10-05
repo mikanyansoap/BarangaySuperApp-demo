@@ -1,10 +1,11 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. Switched to NoActionBar here too -->
-    <style name="Theme.Barangay_superAPP" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- Light-only: the app is designed on light backgrounds, so phone dark mode made text (e.g. spinners) white-on-white -->
+    <style name="Theme.Barangay_superAPP" parent="Theme.MaterialComponents.Light.NoActionBar">
         <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/purple_200</item>
+        <item name="colorPrimary">@color/purple_500</item>
         <item name="colorPrimaryVariant">@color/purple_700</item>
-        <item name="colorOnPrimary">@color/black</item>
+        <item name="colorOnPrimary">@color/white</item>
         <!-- Secondary brand color. -->
         <item name="colorSecondary">@color/teal_200</item>
         <item name="colorSecondaryVariant">@color/teal_200</item>
@@ -12,5 +13,6 @@
         <!-- Status bar color. Matching the background color -->
         <item name="android:statusBarColor">#F5F5ED</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 </resources>

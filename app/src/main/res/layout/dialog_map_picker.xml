@@ -26,22 +26,47 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Tap anywhere on the map or drag the pin to select location."
+            android:text="Tap on the map to move the pin to the exact spot. Pinch to zoom."
             android:textColor="#737973"
             android:textSize="13sp" />
 
-        <!-- Interactive Map WebView (Leaflet / OpenStreetMap) -->
+        <!-- Native OpenStreetMap view (osmdroid). Tap to move the pin, long-press the pin to drag it. -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
-            android:layout_height="280dp"
+            android:layout_height="340dp"
             android:layout_marginTop="16dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="2dp">
 
-            <WebView
-                android:id="@+id/wvMapPicker"
+            <org.osmdroid.views.MapView
+                android:id="@+id/mapPicker"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/tvMapLoading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="8dp"
+                android:background="#CCFFFFFF"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="Finding your area..."
+                android:textColor="#174A45"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:background="#CCFFFFFF"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:text="\u00A9 OpenStreetMap contributors \u00A9 CARTO"
+                android:textColor="#555555"
+                android:textSize="10sp" />
         </androidx.cardview.widget.CardView>
 
         <!-- Address & Coordinates Display -->
@@ -52,7 +77,7 @@
             android:layout_marginTop="12dp"
             android:background="#FFFFFF"
             android:padding="12dp"
-            android:text="📍 Pinned Location: Metro Manila (Lat: 14.5995, Lng: 120.9842)"
+            android:text="📍 Tap the map to pin the location"
             android:textColor="#247D76"
             android:textSize="13sp"
             android:textStyle="bold" />
@@ -126,4 +151,4 @@
             android:textStyle="bold" />
 
     </LinearLayout>
-</androidx.cardview.widget.CardView>
+</androidx.cardview.widget.CardView>

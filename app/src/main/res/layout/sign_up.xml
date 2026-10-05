@@ -492,12 +492,12 @@
                         android:inputType="textPostalAddress" />
                 </androidx.cardview.widget.CardView>
 
-                <!-- Valid ID type Spinner -->
+                <!-- Valid ID type Spinner (optional) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:text="Valid ID type"
+                    android:text="Valid ID type (optional)"
                     android:textColor="#2A3532"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -525,12 +525,12 @@
                         android:textSize="12sp" />
                 </androidx.cardview.widget.CardView>
 
-                <!-- Upload photo of ID -->
+                <!-- Upload photo of ID (optional) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:text="Upload photo of ID"
+                    android:text="Upload photo of ID (optional)"
                     android:textColor="#2A3532"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -564,7 +564,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="12dp"
-                            android:text="Upload photo of ID"
+                            android:text="Upload photo of ID (optional)"
                             android:textColor="#737973"
                             android:textSize="16sp" />
                     </LinearLayout>

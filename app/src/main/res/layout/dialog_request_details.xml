@@ -112,15 +112,90 @@
                 android:textColor="#2A3532"
                 android:textSize="15sp"
                 tools:text="Details go here..." />
+
+            <!-- Uploaded media (photos / files attached by the user) -->
+            <TextView
+                android:id="@+id/tvDialogMediaLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Attached media"
+                android:textColor="#11231D"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <HorizontalScrollView
+                android:id="@+id/scrollDialogMedia"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/layoutDialogMedia"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
         </LinearLayout>
     </ScrollView>
+
+    <!-- Edit Button (only for Pending requests) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/btnEditRequest"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="20dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:visibility="gone"
+        app:cardBackgroundColor="#DDF0EC"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="0dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Edit details"
+            android:textColor="#174A45"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </androidx.cardview.widget.CardView>
+
+    <!-- Cancel Request Button (only for Pending requests) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/btnCancelRequest"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:visibility="gone"
+        app:cardBackgroundColor="#FCEBEA"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="0dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Cancel Request"
+            android:textColor="#CC4E42"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </androidx.cardview.widget.CardView>
 
     <!-- Close Button -->
     <androidx.cardview.widget.CardView
         android:id="@+id/btnCloseDialog"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="10dp"
         android:clickable="true"
         android:focusable="true"
         android:foreground="?android:attr/selectableItemBackground"
@@ -137,4 +212,4 @@
             android:textSize="16sp"
             android:textStyle="bold" />
     </androidx.cardview.widget.CardView>
-</LinearLayout>
+</LinearLayout>

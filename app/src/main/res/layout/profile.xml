@@ -90,7 +90,6 @@
                         android:layout_height="match_parent"
                         android:scaleType="centerCrop"
                         android:src="@drawable/ic_person"
-                        app:tint="#247D76"
                         android:contentDescription="Profile Picture" />
                 </androidx.cardview.widget.CardView>
 
@@ -104,235 +103,185 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- Read-Only: Full Name -->
+            <!-- Personal Information (display only - not editable) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Full Name (Read-only)"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
+                android:layout_marginBottom="8dp"
+                android:text="Personal Information"
+                android:textColor="#11231D"
+                android:textSize="16sp"
                 android:textStyle="bold" />
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#E6E8E6"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="0dp">
-                <EditText
-                    android:id="@+id/etProfileName"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@android:color/transparent"
-                    android:paddingHorizontal="16dp"
-                    android:textColor="#737973"
-                    android:textSize="16sp"
-                    android:enabled="false"
-                    android:focusable="false" />
-            </androidx.cardview.widget.CardView>
-
-            <!-- Read-Only: Mobile Number -->
-            <TextView
-                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Mobile Number (Read-only)"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#E6E8E6"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="0dp">
-                <EditText
-                    android:id="@+id/etProfilePhone"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@android:color/transparent"
-                    android:paddingHorizontal="16dp"
-                    android:textColor="#737973"
-                    android:textSize="16sp"
-                    android:enabled="false"
-                    android:focusable="false" />
-            </androidx.cardview.widget.CardView>
-
-            <!-- Read-Only: Email Address -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Email Address (Read-only)"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#E6E8E6"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="0dp">
-                <EditText
-                    android:id="@+id/etProfileEmail"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@android:color/transparent"
-                    android:paddingHorizontal="16dp"
-                    android:textColor="#737973"
-                    android:textSize="16sp"
-                    android:enabled="false"
-                    android:focusable="false" />
-            </androidx.cardview.widget.CardView>
-
-            <!-- Editable: Complete Address Section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="House No. / Street / Building"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="20dp"
                 app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="8dp"
+                app:cardCornerRadius="12dp"
                 app:cardElevation="0dp">
-                <EditText
-                    android:id="@+id/etProfileHouseStreet"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@android:color/transparent"
-                    android:hint="e.g. 123 Rizal St., Purok 2"
-                    android:paddingHorizontal="16dp"
-                    android:textColor="#11231D"
-                    android:textSize="15sp"
-                    android:inputType="textPostalAddress" />
-            </androidx.cardview.widget.CardView>
-
-            <!-- Region / Province Dropdown -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Region / Province"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="0dp">
-                <AutoCompleteTextView
-                    android:id="@+id/spinnerProfileProvince"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:paddingHorizontal="12dp"
-                    android:hint="Select region or province..."
-                    android:textColor="#11231D"
-                    android:textColorHint="#AAB3AE"
-                    android:textSize="15sp"
-                    android:completionThreshold="1"
-                    android:inputType="textNoSuggestions" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end|center_vertical"
-                    android:paddingEnd="16dp"
-                    android:text="▼"
-                    android:textColor="#2A3532"
+                    android:text="Full name"
+                    android:textColor="#737973"
                     android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfileName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Mobile number"
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfilePhone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Email address"
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfileEmail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="0dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- City / Municipality Dropdown -->
+            <!-- Registered Address (display only - changed via the Change Address button) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="City / Municipality"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
+                android:layout_marginBottom="8dp"
+                android:text="Registered Address"
+                android:textColor="#11231D"
+                android:textSize="16sp"
                 android:textStyle="bold" />
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="20dp"
                 app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="8dp"
+                app:cardCornerRadius="12dp"
                 app:cardElevation="0dp">
-                <AutoCompleteTextView
-                    android:id="@+id/spinnerProfileCity"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:paddingHorizontal="12dp"
-                    android:hint="Select city or municipality..."
-                    android:textColor="#11231D"
-                    android:textColorHint="#AAB3AE"
-                    android:textSize="15sp"
-                    android:completionThreshold="1"
-                    android:inputType="textNoSuggestions" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end|center_vertical"
-                    android:paddingEnd="16dp"
-                    android:text="▼"
-                    android:textColor="#2A3532"
+                    android:text="House no. / Street"
+                    android:textColor="#737973"
                     android:textSize="12sp" />
-            </androidx.cardview.widget.CardView>
-
-            <!-- Barangay Dropdown -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Barangay"
-                android:textColor="#2A3532"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="24dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="0dp">
-                <AutoCompleteTextView
-                    android:id="@+id/spinnerProfileBarangay"
+                <TextView
+                    android:id="@+id/tvProfileStreet"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:paddingHorizontal="12dp"
-                    android:hint="Select barangay..."
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="—"
                     android:textColor="#11231D"
-                    android:textColorHint="#AAB3AE"
-                    android:textSize="15sp"
-                    android:completionThreshold="1"
-                    android:inputType="textNoSuggestions" />
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end|center_vertical"
-                    android:paddingEnd="16dp"
-                    android:text="▼"
-                    android:textColor="#2A3532"
+                    android:text="Barangay"
+                    android:textColor="#737973"
                     android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfileBarangay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="City / Municipality"
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfileCity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Province"
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfileProvince"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Region"
+                    android:textColor="#737973"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvProfileRegion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="0dp"
+                    android:text="—"
+                    android:textColor="#11231D"
+                    android:textIsSelectable="false"
+                    android:textSize="16sp" />
+                </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Save Changes Button -->
+            <!-- Change Address Button (opens edit dialog + confirmation) -->
             <androidx.cardview.widget.CardView
-                android:id="@+id/btnSaveProfile"
+                android:id="@+id/btnChangeAddress"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
                 android:layout_marginBottom="12dp"
@@ -347,7 +296,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:text="Save Address Changes"
+                    android:text="Change Address"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -377,4 +326,4 @@
 
         </LinearLayout>
     </ScrollView>
-</LinearLayout>
+</LinearLayout>

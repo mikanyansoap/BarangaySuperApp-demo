@@ -482,7 +482,7 @@ public class SupabaseClient {
         JSONObject o = new JSONObject();
         o.put("street", street != null ? street : "");
         o.put("barangay", barangayName != null ? barangayName : "");
-        o.put("psgc_code", dbPsgc(barangayCode));                           // always the 10-digit PSGC code
+        o.put("psgc_code", barangayCode != null ? barangayCode : "");      // 10-digit code from the PSGC JSON
         o.put("barangay_id", !legacy.isEmpty() ? legacy : (barangayCode != null ? barangayCode : "")); // 9-digit code used by your DB
         o.put("city", city != null ? city : "");
         o.put("province", province != null ? province : "");
@@ -532,75 +532,34 @@ public class SupabaseClient {
     // REPORTS (public.reports) and REQUESTS (public.requests)
     // ====================================================================
 
-    /**
-     * The ONE psgc_code format used everywhere (app, web portal, database): the 10-digit PSGC code
-     * from psgc.cloud. Old 9-digit codes are converted. The database also converts on every write
-     * and stamps the code from the user's profile, so this is just to send the right value up front.
-     */
+    /** Code to store in psgc_code columns: the 9-digit code your data already uses, else the 10-digit one. */
     public static String dbPsgc(String psgcCode) {
-        if (psgcCode == null || psgcCode.trim().isEmpty()) return "";
-        String modern = PSGCClient.toModernCode(psgcCode);
-        return modern.isEmpty() ? psgcCode.trim() : modern;
+        if (psgcCode == null || psgcCode.isEmpty()) return "137607010";
+        String legacy = PSGCClient.toLegacyCode(psgcCode);
+        return legacy.isEmpty() ? psgcCode : legacy;
     }
 
     /**
      * Inserts a complaint / incident into public.reports (the table the web admin reads).
-     * user_id and psgc_code are set by the database from the signed-in user's profile.
      * @param category "Complaint" for barangay reports, "Incident" for disasters / emergencies
-     * @param priority "low" | "medium" | "high"
-     * @param latitude / longitude the pinned map location, or null if the user didn't pin one
-     * @param locationLabel readable address of the pin / typed location (shown to officials)
+     * @param priority "LOW" | "MEDIUM" | "HIGH"
      */
     public static void submitReportToSupabase(String userId, String psgcCode, String category, String title, String description,
-                                              String priority, String photoUrl, Double latitude, Double longitude,
-                                              String locationLabel, Callback callback) {
+                                              String priority, String photoUrl, Callback callback) {
         try {
             JSONObject f = new JSONObject();
             if (userId != null && !userId.isEmpty()) f.put("user_id", userId);
-            String code = dbPsgc(psgcCode);
-            if (!code.isEmpty()) f.put("psgc_code", code);
+            f.put("psgc_code", dbPsgc(psgcCode));
             f.put("title", title);
             f.put("description", description);
             f.put("category", category);
-            f.put("priority", priority != null ? priority.toLowerCase(Locale.US) : "medium");
+            f.put("priority", priority);
             f.put("status", "pending");
             if (photoUrl != null && !photoUrl.isEmpty()) f.put("photo_url", photoUrl);
-            if (latitude != null && longitude != null) {
-                f.put("latitude", latitude.doubleValue());
-                f.put("longitude", longitude.doubleValue());
-            }
-            if (locationLabel != null && !locationLabel.trim().isEmpty()) f.put("location_label", locationLabel.trim());
             authedWrite("POST", "/rest/v1/reports", f, callback);
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    public static void submitReportToSupabase(String userId, String psgcCode, String category, String title, String description,
-                                              String priority, String photoUrl, Callback callback) {
-        submitReportToSupabase(userId, psgcCode, category, title, description, priority, photoUrl, null, null, null, callback);
-    }
-
-    /**
-     * Reads the current status of the user's own submissions (so History shows what the barangay did on the web).
-     * table = "reports" or "requests". RLS only returns rows that belong to the signed-in user.
-     */
-    public static void fetchSubmissionStatuses(String table, List<String> ids, Callback callback) {
-        if (ids == null || ids.isEmpty()) return;
-        StringBuilder in = new StringBuilder();
-        for (String id : ids) {
-            if (id == null || !id.matches("[0-9A-Za-z-]+")) continue;
-            if (in.length() > 0) in.append(',');
-            in.append(id);
-        }
-        if (in.length() == 0) return;
-        String columns = "requests".equals(table) ? "id,status,pickup_date,admin_remarks" : "id,status";
-        String endpoint = "/rest/v1/" + table + "?select=" + columns + "&id=in.(" + in + ")";
-        withFreshToken(token -> {
-            if (token == null) return;
-            Request request = getAuthenticatedBuilder(endpoint, token).get().build();
-            client.newCall(request).enqueue(callback);
-        });
     }
 
     /** Reads the "sub" (user id) claim from a JWT, "" if not available. */
