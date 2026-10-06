@@ -659,16 +659,16 @@ async function renderDashboard() {
     const summaryBox = document.getElementById('ai-summary-box');
     if (summaryBox) {
       try {
-        const textData = \`Reports past 7 days: \${JSON.stringify(trendPoints)}\`;
+        const textData = `Reports past 7 days: ${JSON.stringify(trendPoints)}`;
         const res = await fetch('/api/admin/ai-summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dataText: textData })
         });
         const d = await res.json();
-        summaryBox.innerHTML = \`<b>✨ AI Summary:</b> <br>\${esc(d.summary)}\`;
+        summaryBox.innerHTML = `<b>✨ AI Summary:</b> <br>${esc(d.summary)}`;
       } catch (err) {
-        summaryBox.innerHTML = \`<span style="color:red">Failed to load AI summary.</span>\`;
+        summaryBox.innerHTML = `<span style="color:red">Failed to load AI summary.</span>`;
       }
     }
   }
