@@ -877,8 +877,8 @@ async function renderQueue() {
         <option value="cancelled">Cancelled</option>
       </select>
       <select id="queue-sort">
-        <option value="newest">Newest first</option>
         <option value="priority">Highest priority</option>
+        <option value="newest">Newest first</option>
       </select>
       <input id="queue-search" placeholder="Search reports...">
     </div>
