@@ -35,3 +35,20 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Android ###
+local.properties
+.cxx
+.externalNativeBuild
+/captures
+
+# Secrets - never commit these
+**/firebase-service-account.json
+**/*service-account*.json
+
+# Old duplicate project copies and local scratch files
+/web/web/
+/web/mobile/
+/_backup_*/
+/app_screen.png
+/p.json

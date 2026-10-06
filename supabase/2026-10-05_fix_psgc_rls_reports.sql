@@ -157,6 +157,60 @@ begin
 end;
 $$;
 
+-- The barangays table (if you have one) still uses 9-digit codes, and foreign keys
+-- like profiles_psgc_code_fkey point at it. Those foreign keys are dropped:
+--   * converting the codes would break them, and
+--   * they reject residents from any barangay that isn't seeded in that table.
+-- The triggers below already take psgc_code from the user's profile, so the app can't send a wrong one.
+-- The barangays table itself is kept and converted to 10-digit codes as well.
+do $$
+declare
+  r        record;
+  code_col text;
+begin
+  if to_regclass('public.barangays') is null then
+    return;
+  end if;
+
+  for r in
+    select c.conname, c.conrelid::regclass as tbl,
+           (select string_agg(a.attname, ',') from pg_attribute a
+             where a.attrelid = c.confrelid and a.attnum = any (c.confkey)) as ref_cols
+      from pg_constraint c
+     where c.contype = 'f' and c.confrelid = 'public.barangays'::regclass
+  loop
+    -- only foreign keys that point at the barangay CODE column (text codes like 137607010)
+    if r.ref_cols ~ '^[^,]+$' and exists (
+         select 1 from information_schema.columns
+          where table_schema = 'public' and table_name = 'barangays'
+            and column_name = r.ref_cols and data_type in ('text', 'character varying', 'character')) then
+      code_col := r.ref_cols;
+      raise notice 'Dropping foreign key % on % (-> barangays.%)', r.conname, r.tbl, r.ref_cols;
+      execute format('alter table %s drop constraint %I', r.tbl, r.conname);
+    end if;
+  end loop;
+
+  if code_col is null then
+    -- no FK found; still convert the usual column name if it exists
+    if exists (select 1 from information_schema.columns
+                where table_schema = 'public' and table_name = 'barangays' and column_name = 'psgc_code') then
+      code_col := 'psgc_code';
+    else
+      return;
+    end if;
+  end if;
+
+  -- convert codes (skip any 9-digit row whose 10-digit twin already exists, then remove it)
+  execute format($q$update public.barangays b set %1$I = public.to_modern_psgc(b.%1$I)
+                    where b.%1$I ~ '^\d{9}$'
+                      and not exists (select 1 from public.barangays x
+                                       where x.%1$I = public.to_modern_psgc(b.%1$I))$q$, code_col);
+  execute format($q$delete from public.barangays b
+                    where b.%1$I ~ '^\d{9}$'
+                      and exists (select 1 from public.barangays x
+                                  where x.%1$I = public.to_modern_psgc(b.%1$I))$q$, code_col);
+end $$;
+
 do $$
 declare t text;
 begin

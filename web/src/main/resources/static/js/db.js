@@ -90,12 +90,22 @@ export const DataService = {
     return data;
   },
 
-  /** Barangay name for the sidebar: profile column if present, else the public PSGC directory. */
+  /**
+   * Barangay name for the sidebar header - never hardcoded:
+   * 1. profiles.barangay / barangay_name, 2. the barangays table, 3. the public PSGC directory.
+   */
   async getBarangayName(profile) {
+    const withPrefix = n => (/^(brgy|barangay)/i.test(n) ? n : `Barangay ${n}`);
     const fromProfile = profile?.barangay || profile?.barangay_name;
-    if (fromProfile) return /^(brgy|barangay)/i.test(fromProfile) ? fromProfile : `Barangay ${fromProfile}`;
+    if (fromProfile) return withPrefix(fromProfile);
     const code = profile?.psgc_code;
     if (!code) return 'Barangay';
+    try {
+      const { data } = await supabase.from('barangays').select('name').eq('psgc_code', code).maybeSingle();
+      if (data?.name) return withPrefix(data.name);
+    } catch (err) {
+      console.warn('barangays lookup failed:', err);
+    }
     try {
       const res = await fetch(`https://psgc.cloud/api/barangays/${encodeURIComponent(code)}`);
       if (res.ok) {
