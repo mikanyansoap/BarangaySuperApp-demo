@@ -101,8 +101,12 @@ export const DataService = {
     const code = profile?.psgc_code;
     if (!code) return 'Barangay';
     try {
-      const { data } = await supabase.from('barangays').select('name').eq('psgc_code', code).maybeSingle();
-      if (data?.name) return withPrefix(data.name);
+      const { data } = await supabase.from('barangays').select('*').eq('psgc_code', code).maybeSingle();
+      if (data?.name) {
+        // many barangays share a name (e.g. 3 "San Isidro" in Metro Manila), so add the city
+        const city = String(data.city_municipality || data.city || '').replace(/^City of\s+/i, '');
+        return withPrefix(data.name) + (city ? `, ${city}` : '');
+      }
     } catch (err) {
       console.warn('barangays lookup failed:', err);
     }

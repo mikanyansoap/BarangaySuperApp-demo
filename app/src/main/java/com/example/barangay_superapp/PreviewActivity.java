@@ -1208,9 +1208,7 @@ public class PreviewActivity extends AppCompatActivity {
                         userData.put("civil_status", civilStatus);
                         userData.put("street", street);
                         userData.put("barangay", brgyName);
-                        userData.put("psgc_code", SupabaseClient.dbPsgc(brgyCode));       // always the 10-digit PSGC code
-                        String legacyCode = PSGCClient.toLegacyCode(brgyCode);
-                        userData.put("barangay_id", legacyCode.isEmpty() ? brgyCode : legacyCode); // old column, kept for compatibility
+                        userData.put("psgc_code", SupabaseClient.dbPsgc(brgyCode));       // the ONE barangay field (10-digit PSGC)
                         userData.put("city", city);
                         userData.put("province", province);
                         userData.put("region", region);
@@ -3816,7 +3814,7 @@ public class PreviewActivity extends AppCompatActivity {
         CardView btnCancel = dialogView.findViewById(R.id.btnDialogCancelAddress);
         CardView btnSave = dialogView.findViewById(R.id.btnDialogSaveAddress);
 
-        // Selections made in this dialog (PSGC codes are needed for barangay_id + region)
+        // Selections made in this dialog (PSGC codes are needed for psgc_code + region)
         final String[] pick = new String[]{"", "", "", "", ""}; // provinceCode, provinceName, cityCode, brgyCode, brgyName
 
         etStreet.setText(prefs.getString("USER_STREET", ""));
@@ -4007,7 +4005,7 @@ public class PreviewActivity extends AppCompatActivity {
         String mobile = firstNonEmpty(src, "mobile_number", "phone");
         String street = firstNonEmpty(src, "street", "house_street");
         String brgyName = TextFix.fix(firstNonEmpty(src, "barangay", "barangay_name"));
-        // Prefer the 10-digit code from the PSGC JSON, then the 9-digit barangay_id
+        // psgc_code is the barangay field; barangay_id only exists in the sign-up data of old accounts
         String brgyCode = firstNonEmpty(src, "psgc_code", "barangay_id", "barangay_code");
         String city = TextFix.fix(firstNonEmpty(src, "city", "city_municipality"));
         String province = TextFix.fix(firstNonEmpty(src, "province"));

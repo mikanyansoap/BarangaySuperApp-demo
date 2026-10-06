@@ -478,12 +478,10 @@ public class SupabaseClient {
     public static JSONObject addressMetadata(String street, String barangayName, String barangayCode,
                                              String city, String province, String region) throws org.json.JSONException {
         String fullAddress = buildFullAddress(street, barangayName, city, province);
-        String legacy = PSGCClient.toLegacyCode(barangayCode);
         JSONObject o = new JSONObject();
         o.put("street", street != null ? street : "");
         o.put("barangay", barangayName != null ? barangayName : "");
-        o.put("psgc_code", dbPsgc(barangayCode));                           // always the 10-digit PSGC code
-        o.put("barangay_id", !legacy.isEmpty() ? legacy : (barangayCode != null ? barangayCode : "")); // 9-digit code used by your DB
+        o.put("psgc_code", dbPsgc(barangayCode));                           // the ONE barangay field (10-digit PSGC)
         o.put("city", city != null ? city : "");
         o.put("province", province != null ? province : "");
         o.put("region", region != null ? region : "");
@@ -493,7 +491,7 @@ public class SupabaseClient {
     }
 
     /**
-     * Syncs the address everywhere: profiles (barangay_id, psgc_code, current_address, plus any other
+     * Syncs the address everywhere: profiles (psgc_code, current_address, plus any other
      * address columns that exist) AND the Auth metadata (keeps street/city/province/region).
      * The callback reports the profiles result.
      */
