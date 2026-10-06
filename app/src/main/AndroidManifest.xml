@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Needed by the OpenStreetMap (osmdroid) map to check connectivity before downloading tiles -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Phone notifications when the barangay updates a request / report (asked on Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
@@ -50,4 +52,4 @@
 
     </application>
 
-</manifest>
+</manifest>

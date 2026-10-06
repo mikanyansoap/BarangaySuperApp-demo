@@ -671,6 +671,58 @@ label.field-label {
 .modal-form-group textarea.field { resize: vertical; min-height: 70px; }
 .modal-btn-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
+/* Announcement editor (formatting matches the mobile app) */
+.md-editor { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.md-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); }
+.md-btn { min-width: 34px; height: 30px; padding: 0 9px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.md-btn:hover { background: var(--teal-100); border-color: var(--line); }
+.md-btn:focus-visible { outline: 2px solid var(--teal-800); outline-offset: 1px; }
+.md-status { margin-left: auto; font-size: 11px; color: var(--teal-800); padding-right: 4px; }
+.md-status.err { color: var(--brick); }
+.md-panes { display: grid; grid-template-columns: 1fr 1fr; }
+.md-editor textarea.md-input { border: 0; border-radius: 0 0 0 10px; min-height: 240px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+.md-editor textarea.md-input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--teal-100); }
+.md-editor textarea.md-input.drag { box-shadow: inset 0 0 0 2px var(--teal-800); }
+.md-preview-wrap { border-left: 1px solid var(--line); padding: 10px 12px; max-height: 360px; overflow-y: auto; background: #FBFBF9; border-radius: 0 0 10px 0; }
+.md-preview-label { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.md-empty { color: var(--muted); font-size: 12px; }
+.md-body { font-size: 13px; line-height: 1.55; color: var(--ink); overflow-wrap: anywhere; }
+.md-body .md-h1 { display: block; font-size: 1.35em; font-weight: 800; margin: 4px 0; }
+.md-body .md-h2 { display: block; font-size: 1.15em; font-weight: 700; margin: 4px 0; }
+.md-body .md-li { display: inline-block; padding-left: 4px; }
+.md-body .md-img { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; margin: 8px 0; background: #E6E8E6; }
+.md-card .md-img { max-height: 140px; }
+@media (max-width: 760px) {
+  .md-panes { grid-template-columns: 1fr; }
+  .md-preview-wrap { border-left: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+  .md-editor textarea.md-input { border-radius: 0; min-height: 200px; }
+}
+
+/* every status the app uses (in_progress etc. had no colour before) */
+.pill.in_progress, .pill.ready_for_pickup { background: var(--teal-100); color: var(--teal-800); }
+.pill.approved { background: var(--sage-100); color: #2F5A45; }
+.pill.rejected { background: var(--brick-100); color: var(--brick); }
+.pill.cancelled { background: #ECEDE8; color: #6B7069; }
+
+/* Visible load errors (instead of an empty page) */
+.load-error { background: var(--brick-100); color: var(--brick); border: 1px solid var(--brick); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; line-height: 1.5; }
+.load-error ul { margin: 4px 0 4px 18px; padding: 0; }
+.load-error span { color: var(--ink); opacity: .75; }
+
+/* Super admin */
+.sb-scope-btn { margin: 4px 0 14px; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.1); color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; }
+.sb-scope-btn:hover { background: rgba(255,255,255,.2); }
+.brgy-results { margin-top: 8px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.brgy-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; }
+.brgy-opt:hover, .brgy-opt:focus-visible { border-color: var(--teal-800); background: var(--teal-100); outline: none; }
+.brgy-opt small { color: var(--muted); font-size: 11px; }
+.brgy-all { margin-bottom: 10px; }
+.brgy-hint { font-size: 12px; color: var(--muted); padding: 6px 2px; }
+.brgy-hint.err { color: var(--brick); }
+.brgy-current { font-size: 13px; margin-bottom: 8px; }
+.brgy-current small { color: var(--muted); margin: 0 6px; }
+.u-all { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); }
+
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .shell { flex-direction: column; }
@@ -682,4 +734,4 @@ label.field-label {
   .sb-nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
   .sb-item { flex: 1 1 140px; }
   .main { height: auto; min-height: 0; padding: 20px 16px; }
-}
+}

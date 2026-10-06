@@ -25,6 +25,29 @@ export function isOfficialProfile(profile) {
   return role !== 'resident' && !BLOCKED_STATUSES.includes(status);
 }
 
+const SUPER_ADMIN_ROLES = ['db_admin', 'super_admin', 'superadmin'];
+
+/** db_admin = super admin over every barangay. */
+export function isSuperAdminProfile(profile) {
+  if (!profile) return false;
+  const status = String(profile.account_status || 'approved').toLowerCase();
+  return SUPER_ADMIN_ROLES.includes(String(profile.role || '').toLowerCase()) && !BLOCKED_STATUSES.includes(status);
+}
+
+/**
+ * Barangay scope of a query.
+ *   psgcCode = '1380300024' -> that barangay only
+ *   psgcCode = null         -> everything the signed-in user may see (super admin: all barangays)
+ */
+function scoped(query, psgcCode) {
+  return psgcCode ? query.eq('psgc_code', psgcCode) : query;
+}
+
+/** Announcements / contacts: a barangay's own rows, or (psgcCode null) the nationwide rows. */
+function ownOrNationwide(query, psgcCode) {
+  return psgcCode ? query.eq('psgc_code', psgcCode) : query.is('psgc_code', null);
+}
+
 /** Throws when an update/delete touched no rows (usually RLS: wrong role or barangay). */
 function ensureChanged(data, what) {
   if (!data || data.length === 0) {
@@ -126,14 +149,14 @@ export const DataService = {
   // ---------------- REPORTS (complaints / incidents) ----------------
 
   async getReports(psgcCode) {
-    const { data, error } = await supabase
+    const { data, error } = await scoped(supabase
       .from('reports')
       .select('*')
-      .eq('psgc_code', psgcCode)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }), psgcCode);
     if (error) throw error;
     return data || [];
   },
+
 
   async getReportById(id) {
     const { data, error } = await supabase
@@ -158,14 +181,15 @@ export const DataService = {
   // ---------------- ACCOUNT APPROVALS ----------------
 
   async getApprovals(psgcCode) {
-    const { data, error } = await supabase
+    const { data, error } = await scoped(supabase
       .from('profiles')
       .select('*')
-      .eq('psgc_code', psgcCode)
       .eq('account_status', 'pending')
-      .order('created_at', { ascending: false });
+      .eq('role', 'resident')
+      .order('created_at', { ascending: false }), psgcCode);
     if (error) throw error;
     return (data || []).map(u => ({
+      psgc_code: u.psgc_code,
       id: u.id,
       name: [u.first_name, u.middle_name, u.last_name, u.suffix].filter(Boolean).join(' ') || u.email || 'Resident',
       email: u.email || '',
@@ -191,11 +215,10 @@ export const DataService = {
   // ---------------- DOCUMENT / ID REQUESTS ----------------
 
   async getDocuments(psgcCode) {
-    const { data, error } = await supabase
+    const { data, error } = await scoped(supabase
       .from('requests')
       .select('*')
-      .eq('psgc_code', psgcCode)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }), psgcCode);
     if (error) throw error;
     return (data || []).map(d => {
       const applicant = /Applicant:\s*(.+)/i.exec(d.description || '');
@@ -223,11 +246,10 @@ export const DataService = {
   // ---------------- ANNOUNCEMENTS ----------------
 
   async getAnnouncements(psgcCode) {
-    const { data, error } = await supabase
+    const { data, error } = await ownOrNationwide(supabase
       .from('announcements')
       .select('*')
-      .eq('psgc_code', psgcCode)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }), psgcCode);
     if (error) throw error;
 
     const todayStr = localDateString(new Date());
@@ -255,7 +277,7 @@ export const DataService = {
         event_date: eventDate || null,
         category,
         type: category === 'Event' ? 'event' : 'announcement',
-        psgc_code: psgcCode,
+        psgc_code: psgcCode || null,   // null = nationwide (super admin only)
         author_id: authorId,
         is_archived: false
       }])
@@ -282,6 +304,26 @@ export const DataService = {
     return ensureChanged(data, 'update this announcement');
   },
 
+  /**
+   * Uploads an image for an announcement to the public "announcement-images" bucket
+   * (folder = the official's barangay code) and returns its public URL.
+   */
+  async uploadAnnouncementImage(file, psgcCode) {
+    if (!file || !String(file.type || '').startsWith('image/')) throw new Error('Only image files can be added.');
+    if (file.size > 5 * 1024 * 1024) throw new Error('Image is too big (max 5 MB).');
+    const ext = (String(file.name || '').split('.').pop() || file.type.split('/')[1] || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `${psgcCode || 'nationwide'}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const bucket = supabase.storage.from('announcement-images');
+    const { error } = await bucket.upload(path, file, { contentType: file.type, upsert: false });
+    if (error) {
+      if (/bucket not found/i.test(error.message || '')) {
+        throw new Error('Image storage is not set up yet (run 2026-10-06_announcement_images.sql in Supabase).');
+      }
+      throw error;
+    }
+    return bucket.getPublicUrl(path).data.publicUrl;
+  },
+
   async archiveAnnouncement(id) {
     const { data, error } = await supabase
       .from('announcements')
@@ -295,11 +337,10 @@ export const DataService = {
   // ---------------- EMERGENCY CONTACTS ----------------
 
   async getEmergencyContacts(psgcCode) {
-    const { data, error } = await supabase
+    const { data, error } = await ownOrNationwide(supabase
       .from('emergency_contacts')
       .select('*')
-      .eq('psgc_code', psgcCode)
-      .order('id', { ascending: true });
+      .order('id', { ascending: true }), psgcCode);
     if (error) throw error;
     return (data || []).map(c => ({
       ...c,
@@ -311,7 +352,7 @@ export const DataService = {
   async createEmergencyContact({ name, category, num, psgcCode }) {
     const { data, error } = await supabase
       .from('emergency_contacts')
-      .insert([{ name, scope: category, phone_number: num, psgc_code: psgcCode }])
+      .insert([{ name, scope: category, phone_number: num, psgc_code: psgcCode || null }])
       .select('id');
     if (error) throw error;
     return ensureChanged(data, 'save this contact');
@@ -335,5 +376,73 @@ export const DataService = {
       .select('id');
     if (error) throw error;
     return ensureChanged(data, 'delete this contact');
+  },
+
+  // ---------------- SUPER ADMIN: barangays ----------------
+
+  /** Search the barangays table by name, city or code. */
+  async searchBarangays(text, limit = 50) {
+    let q = supabase.from('barangays').select('*').order('name').limit(limit);
+    const t = String(text || '').trim().replace(/[,()%]/g, ' ');
+    if (t) {
+      q = /^\d+$/.test(t)
+        ? q.like('psgc_code', `${t}%`)
+        : q.or(`name.ilike.%${t}%,city_municipality.ilike.%${t}%,province.ilike.%${t}%`);
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+  },
+
+  /** { code: 'San Isidro, Makati' } for a list of barangay codes. */
+  async getBarangayLabels(codes) {
+    const unique = [...new Set((codes || []).filter(Boolean))];
+    if (!unique.length) return {};
+    const { data, error } = await supabase.from('barangays').select('*').in('psgc_code', unique);
+    if (error) return {};
+    const out = {};
+    (data || []).forEach(b => {
+      const city = String(b.city_municipality || b.city || '').replace(/^City of\s+/i, '');
+      out[b.psgc_code] = b.name + (city ? `, ${city}` : '');
+    });
+    return out;
+  },
+
+  async saveBarangay(row, isNew) {
+    const payload = {
+      psgc_code: String(row.psgc_code || '').trim(),
+      name: String(row.name || '').trim(),
+      city_municipality: String(row.city_municipality || '').trim(),
+      province: String(row.province || '').trim() || null,
+      region: String(row.region || '').trim() || null
+    };
+    if (!/^\d{10}$/.test(payload.psgc_code)) throw new Error('The PSGC code must be 10 digits.');
+    if (!payload.name || !payload.city_municipality) throw new Error('Name and city / municipality are required.');
+    const q = isNew
+      ? supabase.from('barangays').insert([payload]).select('psgc_code')
+      : supabase.from('barangays').update(payload).eq('psgc_code', payload.psgc_code).select('psgc_code');
+    const { data, error } = await q;
+    if (error) throw error;
+    return ensureChanged(data, 'save this barangay');
+  },
+
+  // ---------------- SUPER ADMIN: users & officials ----------------
+
+  async listProfiles({ search = '', role = '', status = '', psgcCode = null } = {}) {
+    let q = scoped(supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(300), psgcCode);
+    if (role) q = role === 'official' ? q.not('role', 'in', '(resident,db_admin,super_admin,superadmin)') : q.eq('role', role);
+    if (status) q = q.eq('account_status', status);
+    const t = String(search || '').trim().replace(/[,()%]/g, ' ');
+    if (t) q = q.or(`email.ilike.%${t}%,first_name.ilike.%${t}%,last_name.ilike.%${t}%`);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+  },
+
+  async updateProfileAdmin(id, { role, account_status, psgc_code }) {
+    const updates = { role, account_status, psgc_code: psgc_code || null };
+    const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select('id');
+    if (error) throw error;
+    return ensureChanged(data, 'update this user');
   }
 };

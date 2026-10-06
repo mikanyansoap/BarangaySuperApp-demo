@@ -40,7 +40,7 @@
 
             <TextView
                 android:id="@+id/tvDialogTitle"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Document Request"
                 android:textColor="#11231D"
@@ -49,33 +49,37 @@
 
             <TextView
                 android:id="@+id/tvDialogSubtitle"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
                 android:text="Barangay Clearance"
                 android:textColor="#737973"
                 android:textSize="14sp" />
-        </LinearLayout>
 
-        <!-- Status Chip -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/cardDialogStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            app:cardBackgroundColor="#FDF1DA"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="0dp">
-
-            <TextView
-                android:id="@+id/tvDialogStatus"
+            <!-- Status Chip (under the title so a long status can't squeeze the header) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardDialogStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="4dp"
-                android:text="Pending"
-                android:textColor="#DBA03B"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-        </androidx.cardview.widget.CardView>
+                android:layout_marginTop="6dp"
+                app:cardBackgroundColor="#FDF1DA"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp">
+
+                <TextView
+                    android:id="@+id/tvDialogStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="Pending"
+                    android:textColor="#DBA03B"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </androidx.cardview.widget.CardView>
+        </LinearLayout>
+
     </LinearLayout>
 
     <View
@@ -94,6 +98,43 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
+
+            <!-- Latest update from the barangay (status, pickup date, remarks) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardDialogUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="#DDF0EC"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/tvDialogUpdateTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Update from the barangay"
+                        android:textColor="#174A45"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvDialogUpdateBody"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="#2A3532"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
             <TextView
                 android:id="@+id/tvDialogSubmittedDate"
@@ -212,4 +253,4 @@
             android:textSize="16sp"
             android:textStyle="bold" />
     </androidx.cardview.widget.CardView>
-</LinearLayout>
+</LinearLayout>

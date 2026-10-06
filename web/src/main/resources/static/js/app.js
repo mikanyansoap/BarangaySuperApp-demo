@@ -1,4 +1,4 @@
-import { DataService, isOfficialProfile, reportCoords, reportLocationText, localDateString } from './db.js';
+import { supabase, DataService, isOfficialProfile, isSuperAdminProfile, reportCoords, reportLocationText, localDateString } from './db.js';
 
 let calendarViewDate = new Date();
 
@@ -33,10 +33,50 @@ function cssToken(value, fallback) {
   return t || fallback;
 }
 
+// ---------------------------------------------------------------------
+// ANNOUNCEMENT FORMATTING
+// Same rules as the mobile app (PreviewActivity.parseAndAddMarkdown), so the preview here is
+// what residents see on their phones:
+//   # Heading   ## Subheading   **bold**   *italic*   __underline__   - bullet   ![image](https://...)
+// Text is HTML-escaped BEFORE formatting, so nothing typed can become real HTML.
+// ---------------------------------------------------------------------
+const MD_IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+
+function formatMarkdownText(raw) {
+  let html = esc(raw);
+  html = html.replace(/^## (.*)$/gm, '<span class="md-h2">$1</span>');
+  html = html.replace(/^# (.*)$/gm, '<span class="md-h1">$1</span>');
+  html = html.replace(/^[-*] (.*)$/gm, '<span class="md-li">• $1</span>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+  html = html.replace(/\*(.*?)\*/g, '<i>$1</i>');
+  html = html.replace(/__(.*?)__/g, '<u>$1</u>');
+  // headings are blocks already, so the line break right after them is dropped
+  html = html.replace(/(<span class="md-h[12]">.*?<\/span>)\n/g, '$1');
+  return html.replace(/\n/g, '<br>');
+}
+
+/** Announcement body (markdown) -> safe HTML. */
+function renderMarkdown(md) {
+  const text = String(md || '');
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(MD_IMAGE_RE)) {
+    out += formatMarkdownText(text.slice(last, m.index));
+    const url = safeUrl(m[1]);
+    out += url
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img class="md-img" src="${esc(url)}" alt="Announcement image" loading="lazy"></a>`
+      : '';
+    last = m.index + m[0].length;
+  }
+  out += formatMarkdownText(text.slice(last));
+  return out.replace(/^(<br>)+|(<br>)+$/g, '');
+}
+
 function statusLabel(status) {
   const s = String(status || 'pending').toLowerCase();
   return ({
     pending: 'Pending',
+    approved: 'Approved',
     in_progress: 'In progress',
     ready_for_pickup: 'Ready for pickup',
     resolved: 'Resolved',
@@ -129,6 +169,81 @@ function setActiveUser(userData) {
   }
 }
 
+/** The portal's view of the signed-in person, built from their profiles row. */
+async function buildSessionUser(authUser, profile, previous = null) {
+  const superAdmin = isSuperAdminProfile(profile);
+  // a super admin keeps the barangay they were looking at; officials always see their own
+  const psgcCode = superAdmin
+    ? (previous && previous.isSuperAdmin ? previous.psgcCode : (profile.psgc_code || null))
+    : profile.psgc_code;
+  const barangayName = psgcCode
+    ? (previous && previous.psgcCode === psgcCode && previous.barangayName ? previous.barangayName
+       : await DataService.getBarangayName({ ...profile, psgc_code: psgcCode, barangay: superAdmin ? null : profile.barangay }))
+    : 'All barangays (nationwide)';
+  return {
+    id: authUser.id,
+    email: authUser.email || profile.email,
+    fullName: [profile.first_name, profile.last_name].filter(Boolean).join(' ') || authUser.user_metadata?.full_name || authUser.email,
+    role: profile.role,
+    position: superAdmin ? 'Super admin' : (profile.position || profile.role || 'Official'),
+    isSuperAdmin: superAdmin,
+    homePsgc: profile.psgc_code || null,
+    psgcCode,
+    barangayName
+  };
+}
+
+/** Why this profile may not use the portal ('' = allowed). Fails closed. */
+function portalDenial(profile) {
+  if (!profile) return 'No profile was found for this account. Ask your administrator to set it up.';
+  if (isSuperAdminProfile(profile)) return '';
+  if (!isOfficialProfile(profile)) {
+    return String(profile.role || 'resident').toLowerCase() === 'resident'
+      ? 'This portal is for barangay officials only. Residents should use the mobile app.'
+      : 'Your official account is not active yet. Ask your administrator to approve it.';
+  }
+  if (!profile.psgc_code) return 'Your official account has no barangay assigned (psgc_code). Ask your administrator to set it.';
+  return '';
+}
+
+/**
+ * Re-reads the signed-in person's profile so changes made in Supabase (new barangay, new role,
+ * account rejected...) show up without logging out and in again. Returns false if they were signed out.
+ */
+let lastSessionCheck = 0;
+async function refreshSession(force = false) {
+  const current = getActiveUser();
+  if (!current) return false;
+  if (!force && Date.now() - lastSessionCheck < 15000) return true;
+  lastSessionCheck = Date.now();
+  try {
+    const { data } = await supabase.auth.getUser();
+    if (!data?.user) { await signOutAndShowLogin('Your session has ended. Please sign in again.'); return false; }
+    const profile = await DataService.getUserProfile(data.user.id);
+    const denial = portalDenial(profile);
+    if (denial) { await signOutAndShowLogin(denial); return false; }
+    setActiveUser(await buildSessionUser(data.user, profile, current));
+    return true;
+  } catch (err) {
+    console.warn('Could not refresh the session:', err);
+    return true; // offline etc. - keep the current view
+  }
+}
+
+// ---------------------------------------------------------------------
+// LOAD ERRORS: shown on screen instead of failing silently
+// ---------------------------------------------------------------------
+let loadErrors = [];
+async function load(label, fn, fallback) {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`Could not load ${label}:`, err);
+    loadErrors.push(`Could not load ${label}: ${err?.message || err}`);
+    return fallback;
+  }
+}
+
 async function signOutAndShowLogin(message) {
   try { await DataService.logout(); } catch (err) { console.warn('Logout error:', err); }
   setActiveUser(null);
@@ -144,10 +259,10 @@ function closeModal() {
 window.closeModal = closeModal;
 
 /** contentHtml must already be escaped by the caller. */
-function openCustomModal({ title, contentHtml, onConfirm, confirmText = 'Save', confirmClass = 'btn-small' }) {
+function openCustomModal({ title, contentHtml, onConfirm, onOpen, confirmText = 'Save', confirmClass = 'btn-small', width = 460 }) {
   modalRoot.innerHTML = `
     <div class="modal-overlay">
-      <div class="modal-box" style="width: 460px;">
+      <div class="modal-box" style="width: ${Number(width) || 460}px;">
         <div class="modal-head">
           <h4>${esc(title)}</h4>
           <button class="modal-close" id="modal-close-btn">✕</button>
@@ -168,6 +283,7 @@ function openCustomModal({ title, contentHtml, onConfirm, confirmText = 'Save', 
 
   document.getElementById('modal-close-btn').onclick = closeModal;
   document.getElementById('modal-cancel-btn').onclick = closeModal;
+  if (onOpen) onOpen();
   document.getElementById('custom-modal-form').onsubmit = async (e) => {
     e.preventDefault();
     if (!onConfirm) return;
@@ -201,6 +317,9 @@ function shell(mainHtml, active) {
     ['announcements', 'megaphone', 'Announcements'],
     ['emergency', 'phone', 'Emergency contacts']
   ];
+  if (user.isSuperAdmin) {
+    navItems.push(['users', 'user', 'Users & officials'], ['barangays', 'building', 'Barangays']);
+  }
 
   const nav = navItems.map(([key, icon, label]) => `
     <div class="sb-item ${active === key ? 'active' : ''}" data-nav="${key}">
@@ -214,7 +333,8 @@ function shell(mainHtml, active) {
     <div class="shell">
       <div class="sidebar">
         <p class="brgy-name">${esc(user.barangayName)}</p>
-        <p class="brgy-sub">Official Portal</p>
+        <p class="brgy-sub">${user.isSuperAdmin ? 'Super admin · all barangays' : 'Official Portal'}</p>
+        ${user.isSuperAdmin ? `<button class="sb-scope-btn" id="sb-scope" type="button">Switch barangay</button>` : ''}
         <div class="sb-nav">${nav}</div>
         <div class="sb-foot">
           <div class="sb-avatar">${ic('user')}</div>
@@ -229,19 +349,32 @@ function shell(mainHtml, active) {
           </button>
         </div>
       </div>
-      <div class="main">${mainHtml}</div>
+      <div class="main">${loadErrors.length ? `
+        <div class="load-error" role="alert">
+          <b>Some data could not be loaded.</b>
+          <ul>${loadErrors.map(m => `<li>${esc(m)}</li>`).join('')}</ul>
+          <span>Check that the latest SQL files were run in Supabase, then reload the page.</span>
+        </div>` : ''}${mainHtml}</div>
     </div>
   `;
 }
 
+let currentScreen = 'login';
+let currentParam = null;
+
 async function showScreen(screen, param) {
   closeModal();
   destroyMaps();
+  loadErrors = [];
 
-  const user = getActiveUser();
-  if (!user && screen !== 'login') {
+  if (!getActiveUser() && screen !== 'login') {
     return renderLogin();
   }
+  if (screen !== 'login' && !(await refreshSession())) return;
+  const user = getActiveUser();
+  if (['users', 'barangays'].includes(screen) && !user.isSuperAdmin) screen = 'dashboard';
+  currentScreen = screen;
+  currentParam = param;
 
   switch (screen) {
     case 'login': renderLogin(); break;
@@ -252,8 +385,24 @@ async function showScreen(screen, param) {
     case 'documents': await renderDocuments(); break;
     case 'announcements': await renderAnnouncements(); break;
     case 'emergency': await renderEmergency(); break;
+    case 'users': await renderUsers(); break;
+    case 'barangays': await renderBarangays(); break;
   }
 }
+
+// Data changed somewhere else (mobile app, another official, Supabase)? Reload when the tab is used again.
+let lastAutoRefresh = Date.now();
+function refreshCurrentScreen() {
+  if (currentScreen === 'login' || !getActiveUser()) return;
+  if (modalRoot && modalRoot.innerHTML.trim()) return;                  // don't wipe an open form
+  if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+  if (Date.now() - lastAutoRefresh < 10000) return;
+  lastAutoRefresh = Date.now();
+  showScreen(currentScreen, currentParam);
+}
+window.addEventListener('focus', refreshCurrentScreen);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshCurrentScreen(); });
+setInterval(() => { if (!document.hidden) refreshCurrentScreen(); }, 60000);
 
 document.addEventListener('click', (e) => {
   if (e.target.closest('.modal-close') || e.target.classList.contains('modal-overlay')) {
@@ -264,6 +413,11 @@ document.addEventListener('click', (e) => {
   const navItem = e.target.closest('[data-nav]');
   if (navItem) {
     showScreen(navItem.dataset.nav);
+    return;
+  }
+
+  if (e.target.closest('#sb-scope')) {
+    openScopePicker();
     return;
   }
 
@@ -342,37 +496,16 @@ function renderLogin(message) {
         console.error('Profile lookup failed:', err);
       }
 
-      // Every check below fails CLOSED: no profile / no role / no barangay = no access.
-      let denial = '';
-      if (!profile) {
-        denial = 'No profile was found for this account. Ask your administrator to set it up.';
-      } else if (!isOfficialProfile(profile)) {
-        denial = String(profile.role || 'resident').toLowerCase() === 'resident'
-          ? 'This portal is for barangay officials only. Residents should use the mobile app.'
-          : 'Your official account is not active yet. Ask your administrator to approve it.';
-      } else if (!profile.psgc_code) {
-        denial = 'Your official account has no barangay assigned (psgc_code). Ask your administrator to set it.';
-      }
-
+      // Fails CLOSED: no profile / no role / no barangay = no access (super admins need no barangay)
+      const denial = portalDenial(profile);
       if (denial) {
         await DataService.logout();
         showLoginError(denial);
         return;
       }
 
-      const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ')
-        || authResult.user.user_metadata?.full_name || email;
-      const barangayName = await DataService.getBarangayName(profile);
-
-      setActiveUser({
-        id: authResult.user.id,
-        email: authResult.user.email,
-        fullName,
-        role: profile.role,
-        position: profile.position || profile.role || 'Official',
-        psgcCode: profile.psgc_code,
-        barangayName
-      });
+      setActiveUser(await buildSessionUser(authResult.user, profile));
+      lastSessionCheck = Date.now();
 
       showScreen('dashboard');
     } catch (err) {
@@ -392,15 +525,11 @@ async function renderDashboard() {
   let docs = [];
   let announcements = [];
 
-  try {
-    [reports, docs, announcements] = await Promise.all([
-      DataService.getReports(user.psgcCode),
-      DataService.getDocuments(user.psgcCode),
-      DataService.getAnnouncements(user.psgcCode)
-    ]);
-  } catch (err) {
-    console.error('Error fetching dashboard statistics:', err);
-  }
+  [reports, docs, announcements] = await Promise.all([
+    load('reports', () => DataService.getReports(user.psgcCode), []),
+    load('document requests', () => DataService.getDocuments(user.psgcCode), []),
+    load('announcements', () => DataService.getAnnouncements(user.psgcCode), [])
+  ]);
 
   const isStatus = (row, s) => String(row.status || '').toLowerCase() === s;
   const newReports = reports.filter(q => isStatus(q, 'pending')).length;
@@ -521,11 +650,8 @@ async function renderApprovals() {
   const user = getActiveUser();
   let approvals = [];
 
-  try {
-    approvals = await DataService.getApprovals(user.psgcCode);
-  } catch (err) {
-    console.error('Error fetching approvals:', err);
-  }
+  approvals = await load('pending registrations', () => DataService.getApprovals(user.psgcCode), []);
+  const brgyLabels = user.psgcCode ? {} : await DataService.getBarangayLabels(approvals.map(a => a.psgc_code));
 
   const trs = approvals.map(r => `
     <tr class="row-link" data-approval-id="${esc(r.id)}">
@@ -534,7 +660,7 @@ async function renderApprovals() {
           <div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('user')}</div>
           <div>
             <div class="t">${esc(r.name)}</div>
-            <div class="s">${esc(r.address)}</div>
+            <div class="s">${esc(r.address)}${user.psgcCode ? '' : ` · ${esc(brgyLabels[r.psgc_code] || r.psgc_code || 'no barangay')}`}</div>
           </div>
         </div>
       </td>
@@ -629,17 +755,14 @@ function openApprovalModal(record) {
 // ---------------------------------------------------------------------
 // DOCUMENTS & IDs (public.requests)
 // ---------------------------------------------------------------------
-const DOC_STATUSES = ['pending', 'in_progress', 'ready_for_pickup', 'resolved', 'rejected'];
+const DOC_STATUSES = ['pending', 'approved', 'in_progress', 'ready_for_pickup', 'resolved', 'rejected'];
 
 async function renderDocuments() {
   const user = getActiveUser();
   let docs = [];
 
-  try {
-    docs = await DataService.getDocuments(user.psgcCode);
-  } catch (err) {
-    console.error('Error fetching documents:', err);
-  }
+  docs = await load('document requests', () => DataService.getDocuments(user.psgcCode), []);
+  const brgyLabels = user.psgcCode ? {} : await DataService.getBarangayLabels(docs.map(d => d.psgc_code));
 
   const trs = docs.map(d => {
     const rawStatus = String(d.status || 'pending').toLowerCase();
@@ -655,7 +778,7 @@ async function renderDocuments() {
             <div class="ic" style="background:var(--gold-100);color:var(--gold-600);">${ic('doc')}</div>
             <div>
               <div class="t">${esc(d.name)}</div>
-              <div class="s">Requested: ${esc(d.type)}</div>
+              <div class="s">Requested: ${esc(d.type)}${user.psgcCode ? '' : ` · ${esc(brgyLabels[d.psgc_code] || d.psgc_code || '')}`}</div>
             </div>
           </div>
         </td>
@@ -722,11 +845,8 @@ async function renderQueue() {
   const user = getActiveUser();
   let reports = [];
 
-  try {
-    reports = await DataService.getReports(user.psgcCode);
-  } catch (err) {
-    console.error('Error fetching reports from Supabase:', err);
-  }
+  reports = await load('reports', () => DataService.getReports(user.psgcCode), []);
+  const brgyLabels = user.psgcCode ? {} : await DataService.getBarangayLabels(reports.map(r => r.psgc_code));
 
   const categories = [...new Set(reports.map(r => r.category).filter(Boolean))].sort();
   const pinned = reports.map(r => ({ r, c: reportCoords(r) })).filter(x => x.c);
@@ -750,10 +870,15 @@ async function renderQueue() {
       <select id="queue-stat-filter">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
         <option value="in_progress">In progress</option>
         <option value="resolved">Resolved</option>
         <option value="rejected">Rejected</option>
         <option value="cancelled">Cancelled</option>
+      </select>
+      <select id="queue-sort">
+        <option value="newest">Newest first</option>
+        <option value="priority">Highest priority</option>
       </select>
       <input id="queue-search" placeholder="Search reports...">
     </div>
@@ -768,6 +893,7 @@ async function renderQueue() {
     const cat = document.getElementById('queue-cat-filter').value;
     const stat = document.getElementById('queue-stat-filter').value;
     const search = document.getElementById('queue-search').value.toLowerCase();
+    const sortVal = document.getElementById('queue-sort').value;
 
     const list = reports.filter(q => {
       const matchesCat = !cat || q.category === cat;
@@ -776,6 +902,16 @@ async function renderQueue() {
         String(q.title || '').toLowerCase().includes(search) ||
         String(q.description || '').toLowerCase().includes(search);
       return matchesCat && matchesStat && matchesSearch;
+    }).sort((a, b) => {
+      if (sortVal === 'priority') {
+        const getPrio = (p) => p === 'high' ? 3 : (p === 'medium' ? 2 : 1);
+        const pA = getPrio(String(a.priority || 'medium').toLowerCase());
+        const pB = getPrio(String(b.priority || 'medium').toLowerCase());
+        if (pA !== pB) return pB - pA;
+      }
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tB - tA;
     });
 
     const trs = list.map(r => {
@@ -789,7 +925,7 @@ async function renderQueue() {
               <div class="ic" style="background:var(--${high ? 'brick-100' : 'sage-100'});color:var(--${high ? 'brick' : 'teal-800'});">${ic(hasPin ? 'pin' : 'queue')}</div>
               <div>
                 <div class="t">${esc(r.title)}</div>
-                <div class="s">${esc(r.category || 'Report')} · ${r.created_at ? esc(new Date(r.created_at).toLocaleDateString()) : 'Recent'}${hasPin ? ' · 📍 pinned' : ''}${r.ai_severity_score ? ` · AI Severity: ${Number(r.ai_severity_score)}/100` : ''}</div>
+                <div class="s">${user.psgcCode ? '' : `${esc(brgyLabels[r.psgc_code] || r.psgc_code || '')} · `}${esc(r.category || 'Report')} · ${r.created_at ? esc(new Date(r.created_at).toLocaleDateString()) : 'Recent'}${hasPin ? ' · 📍 pinned' : ''}${r.ai_severity_score ? ` · AI Severity: ${Number(r.ai_severity_score)}/100` : ''}</div>
               </div>
             </div>
           </td>
@@ -815,6 +951,7 @@ async function renderQueue() {
   // Filters only re-render the table, so the search box keeps focus while typing
   document.getElementById('queue-cat-filter').onchange = renderRows;
   document.getElementById('queue-stat-filter').onchange = renderRows;
+  document.getElementById('queue-sort').onchange = renderRows;
   document.getElementById('queue-search').oninput = renderRows;
   renderRows();
 
@@ -836,11 +973,7 @@ async function renderQueue() {
 
 async function renderDetail(id) {
   let report = null;
-  try {
-    report = await DataService.getReportById(id);
-  } catch (err) {
-    console.error('Error fetching report details:', err);
-  }
+  report = await load('this report', () => DataService.getReportById(id), null);
 
   if (!report) return showScreen('queue');
 
@@ -955,6 +1088,15 @@ const ANN_CATEGORIES = ['Advisory', 'Health', 'Event'];
 
 function announcementFormHtml(prefix, ann = {}) {
   const current = ann.category || ann.tag || 'Advisory';
+  const tools = [
+    ['h1', 'Heading', '<b>H1</b>'],
+    ['h2', 'Subheading', '<b>H2</b>'],
+    ['bold', 'Bold (Ctrl+B)', '<b>B</b>'],
+    ['italic', 'Italic (Ctrl+I)', '<i>I</i>'],
+    ['underline', 'Underline (Ctrl+U)', '<u>U</u>'],
+    ['list', 'Bullet list', '• List'],
+    ['image', 'Insert image (or paste / drag an image into the text)', '🖼 Image']
+  ];
   return `
     <div class="modal-form-group">
       <label>Title</label>
@@ -962,7 +1104,20 @@ function announcementFormHtml(prefix, ann = {}) {
     </div>
     <div class="modal-form-group">
       <label>Description</label>
-      <textarea class="field" id="${prefix}-desc" placeholder="Details and instructions..." style="height:80px;resize:vertical;" required>${esc(ann.description || '')}</textarea>
+      <div class="md-editor">
+        <div class="md-toolbar" role="toolbar" aria-label="Formatting">
+          ${tools.map(([cmd, label, inner]) => `<button type="button" class="md-btn" data-md="${cmd}" title="${label}" aria-label="${label}">${inner}</button>`).join('')}
+          <span class="md-status" id="${prefix}-md-status" aria-live="polite"></span>
+        </div>
+        <div class="md-panes">
+          <textarea class="field md-input" id="${prefix}-desc" placeholder="Details and instructions...&#10;&#10;Tip: paste or drag a photo here to add it." required>${esc(ann.description || '')}</textarea>
+          <div class="md-preview-wrap">
+            <div class="md-preview-label">Preview on residents' phones</div>
+            <div class="md-preview md-body" id="${prefix}-md-preview"></div>
+          </div>
+        </div>
+        <input type="file" id="${prefix}-md-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      </div>
     </div>
     <div class="modal-form-group">
       <label>Event Date <span style="font-weight:400;color:var(--muted);">(optional; it moves to "Past" after this date)</span></label>
@@ -975,6 +1130,100 @@ function announcementFormHtml(prefix, ann = {}) {
       </select>
     </div>
   `;
+}
+
+/** Wires the toolbar, live preview and image upload of an announcement form. */
+function setupAnnouncementEditor(prefix, psgcCode) {
+  const ta = document.getElementById(`${prefix}-desc`);
+  const preview = document.getElementById(`${prefix}-md-preview`);
+  const fileInput = document.getElementById(`${prefix}-md-file`);
+  const status = document.getElementById(`${prefix}-md-status`);
+  if (!ta) return;
+
+  const refresh = () => {
+    preview.innerHTML = renderMarkdown(ta.value) || '<span class="md-empty">Nothing to preview yet.</span>';
+  };
+
+  const replaceSelection = (text, selectFrom, selectTo) => {
+    const start = ta.selectionStart;
+    ta.setRangeText(text, start, ta.selectionEnd, 'end');
+    if (selectFrom != null) ta.setSelectionRange(start + selectFrom, start + selectTo);
+    ta.focus();
+    refresh();
+  };
+
+  const wrap = (marker, placeholder) => {
+    const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd) || placeholder;
+    replaceSelection(marker + sel + marker, marker.length, marker.length + sel.length);
+  };
+
+  const prefixLines = (pre, placeholder) => {
+    const lineStart = ta.value.lastIndexOf('\n', ta.selectionStart - 1) + 1;
+    ta.setSelectionRange(lineStart, ta.selectionEnd);
+    const block = ta.value.slice(lineStart, ta.selectionEnd) || placeholder;
+    const lines = block.split('\n').map(l => pre + l.replace(/^(#{1,2} |[-*] )/, ''));
+    replaceSelection(lines.join('\n'), pre.length, lines.join('\n').length);
+  };
+
+  const insertBlock = (text) => {
+    const before = ta.value.slice(0, ta.selectionStart);
+    const lead = before && !before.endsWith('\n') ? '\n' : '';
+    replaceSelection(`${lead}${text}\n`);
+  };
+
+  const uploadImages = async (files) => {
+    const images = [...files].filter(f => f.type.startsWith('image/'));
+    if (!images.length) return;
+    for (const file of images) {
+      status.textContent = `Uploading ${file.name || 'image'}...`;
+      status.classList.remove('err');
+      try {
+        const url = await DataService.uploadAnnouncementImage(file, psgcCode);
+        insertBlock(`![image](${url})`);
+        status.textContent = 'Image added';
+      } catch (err) {
+        console.error(err);
+        status.textContent = err?.message || 'Upload failed';
+        status.classList.add('err');
+      }
+    }
+  };
+
+  document.querySelectorAll('.md-btn').forEach(btn => {
+    btn.onclick = () => {
+      switch (btn.dataset.md) {
+        case 'h1': return prefixLines('# ', 'Heading');
+        case 'h2': return prefixLines('## ', 'Subheading');
+        case 'bold': return wrap('**', 'bold text');
+        case 'italic': return wrap('*', 'italic text');
+        case 'underline': return wrap('__', 'underlined text');
+        case 'list': return prefixLines('- ', 'List item');
+        case 'image': return fileInput.click();
+      }
+    };
+  });
+
+  ta.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'b') { e.preventDefault(); wrap('**', 'bold text'); }
+    if (k === 'i') { e.preventDefault(); wrap('*', 'italic text'); }
+    if (k === 'u') { e.preventDefault(); wrap('__', 'underlined text'); }
+  });
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('paste', (e) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length) { e.preventDefault(); uploadImages(files); }
+  });
+  ta.addEventListener('dragover', (e) => { e.preventDefault(); ta.classList.add('drag'); });
+  ta.addEventListener('dragleave', () => ta.classList.remove('drag'));
+  ta.addEventListener('drop', (e) => {
+    ta.classList.remove('drag');
+    if (e.dataTransfer?.files?.length) { e.preventDefault(); uploadImages(e.dataTransfer.files); }
+  });
+  fileInput.onchange = () => { uploadImages(fileInput.files); fileInput.value = ''; };
+
+  refresh();
 }
 
 function readAnnouncementForm(prefix) {
@@ -990,11 +1239,11 @@ async function renderAnnouncements() {
   const user = getActiveUser();
   let announcements = [];
 
-  try {
-    announcements = await DataService.getAnnouncements(user.psgcCode);
-  } catch (err) {
-    console.error('Error fetching announcements:', err);
-  }
+  announcements = await load('announcements', () => DataService.getAnnouncements(user.psgcCode), []);
+  // nationwide posts (by the super admin) also reach every resident; show them read-only
+  const nationwide = user.psgcCode
+    ? (await load('nationwide announcements', () => DataService.getAnnouncements(null), [])).filter(a => !a.isArchived)
+    : [];
 
   const activeList = announcements.filter(a => !a.isArchived);
   const pastList = announcements.filter(a => a.isArchived);
@@ -1018,7 +1267,7 @@ async function renderAnnouncements() {
     <div class="ann-item" style="margin-bottom:12px;">
       <div class="top"><span class="tag" style="color:var(--teal-800);background:var(--teal-100);">${esc(a.tag)}</span></div>
       <p class="title" style="margin:6px 0 2px 0;">${esc(a.title)}</p>
-      ${a.description ? `<p style="font-size:12px; color:var(--muted); margin:0 0 6px 0; white-space:pre-line;">${esc(a.description)}</p>` : ''}
+      ${a.description ? `<div class="md-body md-card" style="font-size:12px; color:var(--muted); margin:0 0 6px 0;">${renderMarkdown(a.description)}</div>` : ''}
       <p class="meta">
         ${a.event_date ? `Event: ${esc(a.event_date)} · ` : ''}Posted ${esc(a.posted)} ·
         <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-edit-ann="${esc(a.id)}">Edit</a>
@@ -1031,7 +1280,7 @@ async function renderAnnouncements() {
     <div class="ann-item" style="margin-bottom:10px; opacity:0.85; background:#fbfbfa;">
       <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${esc(a.tag || 'Archived')}</span></div>
       <p class="title" style="margin:4px 0 2px 0; font-size:13.5px;">${esc(a.title)}</p>
-      ${a.description ? `<p style="font-size:11.5px; color:var(--muted); margin:0 0 4px 0; white-space:pre-line;">${esc(a.description)}</p>` : ''}
+      ${a.description ? `<div class="md-body md-card" style="font-size:11.5px; color:var(--muted); margin:0 0 4px 0;">${renderMarkdown(a.description)}</div>` : ''}
       <p class="meta">
         ${a.event_date ? `Event: ${esc(a.event_date)} · ` : ''}${esc(a.posted || 'Past')} ·
         <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-repost-ann="${esc(a.id)}">Repost</a>
@@ -1060,7 +1309,9 @@ async function renderAnnouncements() {
     <div class="main-head">
       <div>
         <h3>Announcements &amp; calendar</h3>
-        <p>Bulletins published to residents of ${esc(user.barangayName)} on the mobile app.</p>
+        <p>${user.psgcCode
+          ? `Bulletins published to residents of ${esc(user.barangayName)} on the mobile app.`
+          : 'Nationwide bulletins: shown to residents of <b>every</b> barangay.'}</p>
       </div>
       <button class="btn-small" id="btn-new-ann">+ New announcement</button>
     </div>
@@ -1071,6 +1322,17 @@ async function renderAnnouncements() {
         <div style="margin-bottom:24px;">
           ${activeItems || '<p style="color:var(--muted);font-size:12px;">No active announcements published.</p>'}
         </div>
+
+        ${nationwide.length ? `
+        <h4 style="font-size:13px; color:var(--muted); margin-bottom:10px;">Nationwide announcements <span style="font-weight:400;">(posted by the super admin, also shown to your residents)</span></h4>
+        <div style="margin-bottom:24px;">
+          ${nationwide.map(a => `
+            <div class="ann-item" style="margin-bottom:10px; background:#fbfbfa;">
+              <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${esc(a.tag)} · Nationwide</span></div>
+              <p class="title" style="margin:4px 0 2px 0;">${esc(a.title)}</p>
+              ${a.description ? `<div class="md-body md-card" style="font-size:11.5px; color:var(--muted);">${renderMarkdown(a.description)}</div>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
 
         <h4 style="font-size:13px; color:var(--muted); margin-bottom:10px;">Past Announcements</h4>
         <div style="max-height: 480px; overflow-y: auto; padding-right: 6px;">
@@ -1110,6 +1372,8 @@ async function renderAnnouncements() {
     openCustomModal({
       title: 'Publish announcement',
       contentHtml: announcementFormHtml('ann'),
+      width: 860,
+      onOpen: () => setupAnnouncementEditor('ann', user.psgcCode),
       confirmText: 'Publish',
       onConfirm: async () => {
         await DataService.createAnnouncement({
@@ -1141,6 +1405,8 @@ async function renderAnnouncements() {
       contentHtml: (repost && ann.isPastEvent
         ? '<p style="font-size:12px;color:var(--muted);margin:0 0 12px 0;">This event date has passed. Set a new date (or clear it) so residents see it again.</p>'
         : '') + announcementFormHtml('edit-ann', ann),
+      width: 860,
+      onOpen: () => setupAnnouncementEditor('edit-ann', user.psgcCode),
       confirmText: repost ? 'Repost' : 'Save Changes',
       onConfirm: async () => {
         const form = readAnnouncementForm('edit-ann');
@@ -1198,11 +1464,10 @@ async function renderEmergency() {
   const user = getActiveUser();
   let contacts = [];
 
-  try {
-    contacts = await DataService.getEmergencyContacts(user.psgcCode);
-  } catch (err) {
-    console.error('Error fetching emergency contacts:', err);
-  }
+  contacts = await load('emergency contacts', () => DataService.getEmergencyContacts(user.psgcCode), []);
+  const nationwideContacts = user.psgcCode
+    ? await load('nationwide hotlines', () => DataService.getEmergencyContacts(null), [])
+    : [];
 
   const trs = contacts.map(r => `
     <tr>
@@ -1227,7 +1492,9 @@ async function renderEmergency() {
     <div class="main-head">
       <div>
         <h3>Emergency contacts</h3>
-        <p>Public hotlines broadcasted to the citizen app.</p>
+        <p>${user.psgcCode
+          ? `Hotlines shown in the mobile app to residents of ${esc(user.barangayName)}.`
+          : 'Nationwide hotlines: shown to residents of <b>every</b> barangay.'}</p>
       </div>
       <button class="btn-small" id="btn-add-em">+ Add contact</button>
     </div>
@@ -1235,6 +1502,14 @@ async function renderEmergency() {
       <thead><tr><th>Name</th><th>Category</th><th>Number</th><th></th></tr></thead>
       <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No contacts registered.</td></tr>'}</tbody>
     </table>
+    ${nationwideContacts.length ? `
+      <h4 style="font-size:13px; color:var(--muted); margin:22px 0 8px;">Nationwide hotlines <span style="font-weight:400;">(managed by the super admin, also shown to your residents)</span></h4>
+      <table class="table">
+        <tbody>${nationwideContacts.map(c => `
+          <tr><td><div class="name-cell"><div class="ic" style="background:#f1f5f9;color:#64748b;">${ic('phone')}</div><div class="t">${esc(c.name)}</div></div></td>
+              <td>${esc(c.category)}</td><td><b>${esc(c.num || 'No number')}</b></td><td></td></tr>`).join('')}
+        </tbody>
+      </table>` : ''}
   `;
   stage.innerHTML = shell(main, 'emergency');
 
@@ -1290,12 +1565,317 @@ async function renderEmergency() {
   });
 }
 
+
+// ---------------------------------------------------------------------
+// SUPER ADMIN: barangay switcher
+// ---------------------------------------------------------------------
+function barangayLabel(b) {
+  const city = String(b.city_municipality || b.city || '').replace(/^City of\s+/i, '');
+  return `${b.name}${city ? `, ${city}` : ''}`;
+}
+
+/** Search box over the barangays table. onPick(row | null). */
+function barangaySearchHtml(prefix, placeholder = 'Search barangay, city or PSGC code...') {
+  return `
+    <input class="field" id="${prefix}-q" placeholder="${esc(placeholder)}" autocomplete="off">
+    <div class="brgy-results" id="${prefix}-results" role="listbox"></div>`;
+}
+
+function wireBarangaySearch(prefix, onPick) {
+  const q = document.getElementById(`${prefix}-q`);
+  const results = document.getElementById(`${prefix}-results`);
+  let timer = null;
+  let seq = 0;
+  const run = async () => {
+    const mine = ++seq;
+    results.innerHTML = '<div class="brgy-hint">Searching...</div>';
+    try {
+      const rows = await DataService.searchBarangays(q.value, 40);
+      if (mine !== seq) return;
+      results.innerHTML = rows.length
+        ? rows.map(b => `
+            <button type="button" class="brgy-opt" data-code="${esc(b.psgc_code)}">
+              <span>${esc(barangayLabel(b))}</span><small>${esc([b.province, b.psgc_code].filter(Boolean).join(' · '))}</small>
+            </button>`).join('')
+        : '<div class="brgy-hint">No barangay found. Super admins can add one under Barangays.</div>';
+      results.querySelectorAll('.brgy-opt').forEach(btn => {
+        btn.onclick = () => onPick(rows.find(r => r.psgc_code === btn.dataset.code));
+      });
+    } catch (err) {
+      results.innerHTML = `<div class="brgy-hint err">${esc(err.message || 'Search failed')}</div>`;
+    }
+  };
+  q.oninput = () => { clearTimeout(timer); timer = setTimeout(run, 250); };
+  run();
+  setTimeout(() => q.focus(), 0);
+}
+
+function openScopePicker() {
+  const user = getActiveUser();
+  openCustomModal({
+    title: 'Switch barangay',
+    width: 520,
+    contentHtml: `
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">You are viewing <b>${esc(user.barangayName)}</b>.
+        Every screen (reports, requests, approvals, announcements, contacts) will show the barangay you pick.</p>
+      <button type="button" class="brgy-opt brgy-all" id="scope-all">
+        <span>🌏 All barangays (nationwide)</span><small>Reports &amp; requests from every barangay · nationwide announcements &amp; hotlines</small>
+      </button>
+      ${barangaySearchHtml('scope')}`,
+    confirmText: 'Close',
+    confirmClass: 'btn-small ghost',
+    onConfirm: async () => closeModal(),
+    onOpen: () => {
+      const pick = (b) => {
+        const u = getActiveUser();
+        u.psgcCode = b ? b.psgc_code : null;
+        u.barangayName = b ? `Barangay ${barangayLabel(b)}` : 'All barangays (nationwide)';
+        setActiveUser(u);
+        closeModal();
+        showScreen(currentScreen === 'detail' ? 'queue' : currentScreen);
+      };
+      document.getElementById('scope-all').onclick = () => pick(null);
+      wireBarangaySearch('scope', pick);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
+// SUPER ADMIN: users & officials
+// ---------------------------------------------------------------------
+const ROLE_OPTIONS = [
+  ['resident', 'Resident (mobile app)'],
+  ['official', 'Barangay official (this portal, one barangay)'],
+  ['db_admin', 'Super admin (all barangays)']
+];
+const STATUS_OPTIONS = [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']];
+let userFilters = { search: '', role: '', status: '', allBarangays: false };
+
+function roleBadge(role) {
+  const r = String(role || 'resident').toLowerCase();
+  if (['db_admin', 'super_admin', 'superadmin'].includes(r)) return '<span class="pill high">Super admin</span>';
+  if (r === 'resident') return '<span class="pill low">Resident</span>';
+  return `<span class="pill medium">${esc(r === 'official' ? 'Official' : r)}</span>`;
+}
+
+async function renderUsers() {
+  const user = getActiveUser();
+  const scope = userFilters.allBarangays ? null : user.psgcCode;
+  const people = await load('users', () => DataService.listProfiles({ ...userFilters, psgcCode: scope }), []);
+  const labels = await DataService.getBarangayLabels(people.map(p => p.psgc_code));
+
+  const rows = people.map(p => {
+    const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || '(no name)';
+    return `
+      <tr class="row-link" data-user-id="${esc(p.id)}">
+        <td><div class="name-cell"><div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('user')}</div>
+          <div><div class="t">${esc(name)}</div><div class="s">${esc(p.email || '')}</div></div></div></td>
+        <td>${roleBadge(p.role)}</td>
+        <td><span class="pill ${cssToken(p.account_status, 'pending')}">${esc(statusLabel(p.account_status))}</span></td>
+        <td style="font-size:12px;">${p.psgc_code ? esc(labels[p.psgc_code] || p.psgc_code) : '<span style="color:var(--muted);">— none —</span>'}</td>
+        <td style="text-align:right;color:var(--muted);">${ic('chevron')}</td>
+      </tr>`;
+  }).join('');
+
+  const main = `
+    <div class="main-head">
+      <div>
+        <h3>Users &amp; officials</h3>
+        <p>Set who is a resident, a barangay official or a super admin, approve accounts, and move people to another barangay.
+           New accounts are created in Supabase (Authentication → Add user) or by signing up in the app, then managed here.</p>
+      </div>
+    </div>
+    <div class="filters">
+      <input id="u-search" placeholder="Search name or email..." value="${esc(userFilters.search)}">
+      <select id="u-role">
+        <option value="">All roles</option>
+        <option value="resident" ${userFilters.role === 'resident' ? 'selected' : ''}>Residents</option>
+        <option value="official" ${userFilters.role === 'official' ? 'selected' : ''}>Officials</option>
+        <option value="db_admin" ${userFilters.role === 'db_admin' ? 'selected' : ''}>Super admins</option>
+      </select>
+      <select id="u-status">
+        <option value="">All statuses</option>
+        ${STATUS_OPTIONS.map(([v, l]) => `<option value="${v}" ${userFilters.status === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      ${user.psgcCode ? `<label class="u-all"><input type="checkbox" id="u-all" ${userFilters.allBarangays ? 'checked' : ''}> All barangays</label>` : ''}
+    </div>
+    <p style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">${people.length >= 300 ? 'Showing the newest 300 - narrow the search.' : `${people.length} account(s)`}
+      ${scope ? ` in ${esc(user.barangayName)}` : ' in all barangays'}</p>
+    <table class="table">
+      <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Barangay</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted);padding:16px 10px;">No accounts match.</td></tr>'}</tbody>
+    </table>`;
+  stage.innerHTML = shell(main, 'users');
+
+  let timer = null;
+  document.getElementById('u-search').oninput = (e) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { userFilters.search = e.target.value; renderUsers().then(() => {
+      const el = document.getElementById('u-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+    }); }, 350);
+  };
+  document.getElementById('u-role').onchange = (e) => { userFilters.role = e.target.value; renderUsers(); };
+  document.getElementById('u-status').onchange = (e) => { userFilters.status = e.target.value; renderUsers(); };
+  const all = document.getElementById('u-all');
+  if (all) all.onchange = (e) => { userFilters.allBarangays = e.target.checked; renderUsers(); };
+
+  document.querySelectorAll('[data-user-id]').forEach(row => {
+    row.onclick = () => {
+      const person = people.find(p => p.id === row.dataset.userId);
+      if (person) openUserEditor(person, labels[person.psgc_code]);
+    };
+  });
+}
+
+function openUserEditor(person, currentLabel) {
+  const me = getActiveUser();
+  const isMe = person.id === me.id;
+  let chosen = person.psgc_code ? { psgc_code: person.psgc_code, label: currentLabel || person.psgc_code } : null;
+  const role = String(person.role || 'resident').toLowerCase();
+  const name = [person.first_name, person.last_name].filter(Boolean).join(' ') || person.email;
+
+  openCustomModal({
+    title: `Edit ${name}`,
+    width: 560,
+    contentHtml: `
+      <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">${esc(person.email || '')}${person.mobile_number ? ` · ${esc(person.mobile_number)}` : ''}</p>
+      <div class="modal-form-group">
+        <label>Role</label>
+        <select class="field" id="ue-role" ${isMe ? 'disabled' : ''}>
+          ${ROLE_OPTIONS.map(([v, l]) => `<option value="${v}" ${role === v || (v === 'official' && !['resident', 'db_admin', 'super_admin', 'superadmin'].includes(role)) ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+        ${isMe ? '<p class="brgy-hint">You can\'t change your own role.</p>' : ''}
+      </div>
+      <div class="modal-form-group">
+        <label>Account status</label>
+        <select class="field" id="ue-status">
+          ${STATUS_OPTIONS.map(([v, l]) => `<option value="${v}" ${String(person.account_status || 'pending').toLowerCase() === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="modal-form-group">
+        <label>Barangay</label>
+        <div class="brgy-current" id="ue-brgy-current"></div>
+        ${barangaySearchHtml('ue', 'Search to change the barangay...')}
+      </div>`,
+    confirmText: 'Save changes',
+    onOpen: () => {
+      const cur = document.getElementById('ue-brgy-current');
+      const paint = () => {
+        cur.innerHTML = chosen
+          ? `<b>${esc(chosen.label)}</b> <small>${esc(chosen.psgc_code)}</small> <button type="button" class="link-btn" id="ue-clear">Remove</button>`
+          : '<span style="color:var(--muted);">No barangay (only allowed for super admins)</span>';
+        const clr = document.getElementById('ue-clear');
+        if (clr) clr.onclick = () => { chosen = null; paint(); };
+      };
+      paint();
+      wireBarangaySearch('ue', (b) => { chosen = { psgc_code: b.psgc_code, label: barangayLabel(b) }; paint(); });
+    },
+    onConfirm: async () => {
+      const newRole = isMe ? person.role : document.getElementById('ue-role').value;
+      if (newRole !== 'db_admin' && !chosen) throw new Error('Residents and officials need a barangay.');
+      await DataService.updateProfileAdmin(person.id, {
+        role: newRole,
+        account_status: document.getElementById('ue-status').value,
+        psgc_code: chosen ? chosen.psgc_code : null
+      });
+      closeModal();
+      renderUsers();
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
+// SUPER ADMIN: barangays list
+// ---------------------------------------------------------------------
+let barangayQuery = '';
+
+async function renderBarangays() {
+  const rows = await load('barangays', () => DataService.searchBarangays(barangayQuery, 100), []);
+  const trs = rows.map(b => `
+    <tr>
+      <td><div class="t" style="font-weight:600;">${esc(b.name)}</div><div class="s">${esc(b.psgc_code)}</div></td>
+      <td>${esc(b.city_municipality || b.city || '')}</td>
+      <td>${esc(b.province || '')}</td>
+      <td>${esc(b.region || '')}</td>
+      <td><div class="table-actions">
+        <button class="link-btn" data-view-brgy="${esc(b.psgc_code)}">View</button>
+        <button class="link-btn" data-edit-brgy="${esc(b.psgc_code)}">Edit</button>
+      </div></td>
+    </tr>`).join('');
+
+  const main = `
+    <div class="main-head">
+      <div>
+        <h3>Barangays</h3>
+        <p>The barangay list used for portal headers and the switcher. Codes are 10-digit PSGC codes.</p>
+      </div>
+      <button class="btn-small" id="btn-add-brgy">+ Add barangay</button>
+    </div>
+    <div class="filters"><input id="b-search" placeholder="Search name, city, province or code..." value="${esc(barangayQuery)}"></div>
+    <p style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">${rows.length >= 100 ? 'Showing the first 100 matches - narrow the search.' : `${rows.length} barangay(s)`}</p>
+    <table class="table">
+      <thead><tr><th>Barangay</th><th>City / municipality</th><th>Province</th><th>Region</th><th></th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="5" style="color:var(--muted);padding:16px 10px;">No barangays match.</td></tr>'}</tbody>
+    </table>`;
+  stage.innerHTML = shell(main, 'barangays');
+
+  let timer = null;
+  document.getElementById('b-search').oninput = (e) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { barangayQuery = e.target.value; renderBarangays().then(() => {
+      const el = document.getElementById('b-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+    }); }, 350);
+  };
+
+  const editor = (b) => {
+    const isNew = !b;
+    b = b || {};
+    openCustomModal({
+      title: isNew ? 'Add barangay' : `Edit ${b.name}`,
+      contentHtml: `
+        <div class="modal-form-group"><label>PSGC code (10 digits)</label>
+          <input class="field" id="bf-code" value="${esc(b.psgc_code || '')}" ${isNew ? '' : 'readonly'} required pattern="\\d{10}" inputmode="numeric"></div>
+        <div class="modal-form-group"><label>Barangay name</label><input class="field" id="bf-name" value="${esc(b.name || '')}" required></div>
+        <div class="modal-form-group"><label>City / municipality</label><input class="field" id="bf-city" value="${esc(b.city_municipality || b.city || '')}" required></div>
+        <div class="modal-form-group"><label>Province</label><input class="field" id="bf-prov" value="${esc(b.province || '')}"></div>
+        <div class="modal-form-group"><label>Region</label><input class="field" id="bf-region" value="${esc(b.region || '')}"></div>`,
+      confirmText: isNew ? 'Add' : 'Save',
+      onConfirm: async () => {
+        await DataService.saveBarangay({
+          psgc_code: document.getElementById('bf-code').value,
+          name: document.getElementById('bf-name').value,
+          city_municipality: document.getElementById('bf-city').value,
+          province: document.getElementById('bf-prov').value,
+          region: document.getElementById('bf-region').value
+        }, isNew);
+        closeModal();
+        renderBarangays();
+      }
+    });
+  };
+  document.getElementById('btn-add-brgy').onclick = () => editor(null);
+  document.querySelectorAll('[data-edit-brgy]').forEach(btn => {
+    btn.onclick = () => editor(rows.find(r => r.psgc_code === btn.dataset.editBrgy));
+  });
+  document.querySelectorAll('[data-view-brgy]').forEach(btn => {
+    btn.onclick = () => {
+      const b = rows.find(r => r.psgc_code === btn.dataset.viewBrgy);
+      const u = getActiveUser();
+      u.psgcCode = b.psgc_code;
+      u.barangayName = `Barangay ${barangayLabel(b)}`;
+      setActiveUser(u);
+      showScreen('dashboard');
+    };
+  });
+}
+
 // ---------------------------------------------------------------------
 // START: only trust the saved portal user if Supabase still has a session
 // ---------------------------------------------------------------------
 (async () => {
   const saved = getActiveUser();
-  if (saved && saved.psgcCode && await DataService.hasSession()) {
+  if (saved && await DataService.hasSession()) {
+    lastSessionCheck = 0;
     showScreen('dashboard');
   } else {
     setActiveUser(null);

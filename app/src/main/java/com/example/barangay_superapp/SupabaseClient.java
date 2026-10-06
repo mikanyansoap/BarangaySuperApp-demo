@@ -685,6 +685,71 @@ public class SupabaseClient {
         submitRequestToSupabase(userId, psgcCode, category, title, description, locationAddress, lat, lng, null, callback);
     }
 
+    /** All of the signed-in user's own rows in reports / requests (RLS only returns their own). */
+    public static void fetchMySubmissions(String table, String userId, Callback callback) {
+        if (userId == null || !userId.matches("[0-9A-Fa-f-]{36}")) return;
+        String endpoint = "/rest/v1/" + table + "?select=*&user_id=eq." + userId + "&order=created_at.desc&limit=200";
+        withFreshToken(token -> {
+            if (token == null) return;
+            client.newCall(getAuthenticatedBuilder(endpoint, token).get().build()).enqueue(callback);
+        });
+    }
+
+    /**
+     * BLOCKING version for background work: the user's own rows of reports / requests, or null on failure.
+     * Refreshes an expired token first.
+     */
+    public static JSONArray fetchMySubmissionsBlocking(String table, String userId) {
+        if (userId == null || !userId.matches("[0-9A-Fa-f-]{36}")) return null;
+        String token = freshTokenBlocking();
+        if (token == null) return null;
+        String endpoint = "/rest/v1/" + table + "?select=*&user_id=eq." + userId + "&order=created_at.desc&limit=200";
+        try (Response r = client.newCall(getAuthenticatedBuilder(endpoint, token).get().build()).execute()) {
+            String body = readBody(r);
+            if (!r.isSuccessful()) {
+                android.util.Log.w("SupabaseSync", table + " HTTP " + r.code() + ": " + body);
+                return null;
+            }
+            return new JSONArray(body);
+        } catch (Exception e) {
+            android.util.Log.w("SupabaseSync", table + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** BLOCKING: a non-expired access token (refreshing it if needed), or null when signed out. */
+    public static String freshTokenBlocking() {
+        SharedPreferences p = prefs();
+        String token = getAccessToken();
+        if (p == null || token == null) return null;
+        long expiresAt = p.getLong(KEY_TOKEN_EXPIRES_AT, 0);
+        if (expiresAt == 0) expiresAt = readJwtExp(token);
+        if (expiresAt == 0 || expiresAt - System.currentTimeMillis() / 1000 > 60) return token;
+        String refresh = p.getString(KEY_REFRESH_TOKEN, "");
+        if (refresh.isEmpty()) return token;
+        synchronized (refreshLock) {
+            try {
+                JSONObject body = new JSONObject().put("refresh_token", refresh);
+                Request request = anonBuilder("/auth/v1/token?grant_type=refresh_token")
+                        .post(RequestBody.create(body.toString(), JSON)).build();
+                try (Response r = client.newCall(request).execute()) {
+                    if (r.isSuccessful()) saveSession(new JSONObject(readBody(r)));
+                }
+            } catch (Exception e) {
+                android.util.Log.w("SupabaseAuth", "background refresh failed: " + e.getMessage());
+            }
+        }
+        return getAccessToken();
+    }
+
+    /** Emergency hotlines for a barangay (10-digit PSGC code) + nationwide ones (psgc_code is null). */
+    public static void fetchEmergencyContacts(String psgcCode, Callback callback) {
+        String code = dbPsgc(psgcCode);
+        String filter = code.matches("\\d{10}") ? "or=(psgc_code.eq." + code + ",psgc_code.is.null)" : "psgc_code=is.null";
+        String endpoint = "/rest/v1/emergency_contacts?select=*&" + filter + "&order=id.asc";
+        withFreshToken(token -> client.newCall(getAuthenticatedBuilder(endpoint, token).get().build()).enqueue(callback));
+    }
+
     /** Edits a submitted row (e.g. fixing a typo while still pending). table = "reports" or "requests". */
     public static void updateRequest(String table, String rowId, JSONObject fields, Callback callback) {
         authedWrite("PATCH", "/rest/v1/" + table + "?id=eq." + rowId, fields, callback);

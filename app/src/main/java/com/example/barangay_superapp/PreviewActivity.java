@@ -1575,8 +1575,6 @@ public class PreviewActivity extends AppCompatActivity {
                 btnProfilePicture.setOnClickListener(v -> launchPreview(R.layout.profile));
             }
 
-            // If the barangay rejected the account (or it went back to pending), sign out
-            verifyAccountStillApproved(prefs);
 
             TextView tvWeatherDate = findViewById(R.id.tvWeatherDate);
             ImageView ivWeatherIcon = findViewById(R.id.ivWeatherIcon);
@@ -1629,8 +1627,24 @@ public class PreviewActivity extends AppCompatActivity {
                 rvDashboardAnnouncements.setAdapter(dashAnnounceAdapter);
             }
 
-            // Fetch announcements for the user's barangay (PSGC code)
-            loadBarangayAnnouncements(prefs);
+            // Announcements for the user's barangay (PSGC code): now, every 60 s, and when the app comes back
+            startLiveUpdates(() -> {
+                loadBarangayAnnouncements(prefs);
+                verifyAccountStillApproved(prefs);
+                syncHistoryStatuses(prefs, null);   // notifies the phone about request / report updates
+            }, 60000);
+
+            // Phone notifications for request / report updates (also while the app is closed)
+            if (prefs.getBoolean("IS_LOGGED_IN", false)) {
+                HistorySync.ensureChannel(this);
+                StatusCheckWorker.schedule(this);
+                if (android.os.Build.VERSION.SDK_INT >= 33
+                        && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                        && !prefs.getBoolean("ASKED_NOTIFICATION_PERMISSION", false)) {
+                    prefs.edit().putBoolean("ASKED_NOTIFICATION_PERMISSION", true).apply();
+                    requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 4242);
+                }
+            }
 
             CardView cardDashboardReport = findViewById(R.id.cardDashboardReport);
             CardView cardDashboardRequest = findViewById(R.id.cardDashboardRequest);
@@ -1711,6 +1725,7 @@ public class PreviewActivity extends AppCompatActivity {
                     clearUserPrefs(ed);
                     ed.apply();
                     SupabaseClient.clearSession();
+                    StatusCheckWorker.cancel(this);
                     Toast.makeText(this, "Logged Out Successfully", Toast.LENGTH_SHORT).show();
                     Intent intent = new Intent(PreviewActivity.this, PreviewActivity.class);
                     intent.putExtra("LAYOUT_ID", R.layout.sign_in);
@@ -1764,7 +1779,7 @@ public class PreviewActivity extends AppCompatActivity {
                             String cat = item.optString("category", "General");
                             String date = item.optString("date", "Today");
                             String title = item.optString("title", "");
-                            String desc = item.optString("description", "");
+                            String desc = item.optString("description_plain", item.optString("description", ""));
                             String colorHex = item.optString("categoryColorHex", "#247D76");
                             String bgHex = item.optString("categoryBgHex", "#DFF2F0");
 
@@ -1845,7 +1860,7 @@ public class PreviewActivity extends AppCompatActivity {
                 // This screen is its own Activity, so it has to load the announcements itself;
                 // re-run the filter when they arrive.
                 onAnnouncementsUpdated = filterAnnouncements;
-                loadBarangayAnnouncements(prefs);
+                startLiveUpdates(() -> loadBarangayAnnouncements(prefs), 60000);
 
                 if (chipAll != null) chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; filterAnnouncements.run(); });
                 if (chipHealth != null) chipHealth.setOnClickListener(v -> { currentHistoryFilter = "Health"; filterAnnouncements.run(); });
@@ -1858,23 +1873,10 @@ public class PreviewActivity extends AppCompatActivity {
         // EMERGENCY CONTACTS DIRECT DIAL LOGIC
         // ====================================================================
         if (layoutId == R.layout.emergency_contacts_list) {
-            View btnCallBarangayHall = findViewById(R.id.btnCallBarangayHall);
-            View btnCallTanod = findViewById(R.id.btnCallTanod);
-            View btnCallBhert = findViewById(R.id.btnCallBhert);
-            View btnCallPolice = findViewById(R.id.btnCallPolice);
-            View btnCallFire = findViewById(R.id.btnCallFire);
-            View btnCallRescue = findViewById(R.id.btnCallRescue);
-            View btnCall911 = findViewById(R.id.btnCall911);
-            View btnCallRedCross = findViewById(R.id.btnCallRedCross);
-
-            if (btnCallBarangayHall != null) btnCallBarangayHall.setOnClickListener(v -> dialNumber("0281234567"));
-            if (btnCallTanod != null) btnCallTanod.setOnClickListener(v -> dialNumber("09171234567"));
-            if (btnCallBhert != null) btnCallBhert.setOnClickListener(v -> dialNumber("09189876543"));
-            if (btnCallPolice != null) btnCallPolice.setOnClickListener(v -> dialNumber("0289991111"));
-            if (btnCallFire != null) btnCallFire.setOnClickListener(v -> dialNumber("0289992222"));
-            if (btnCallRescue != null) btnCallRescue.setOnClickListener(v -> dialNumber("0289993333"));
-            if (btnCall911 != null) btnCall911.setOnClickListener(v -> dialNumber("911"));
-            if (btnCallRedCross != null) btnCallRedCross.setOnClickListener(v -> dialNumber("143"));
+            // No hardcoded numbers: officials add their barangay's hotlines in the web portal,
+            // the super admin adds nationwide ones. Shows the last saved list instantly, then refreshes.
+            renderEmergencyContacts(prefs.getString("CACHED_EMERGENCY_CONTACTS", ""), true);
+            startLiveUpdates(() -> loadEmergencyContacts(prefs), 60000);
         }
 
         // ====================================================================
@@ -1964,19 +1966,11 @@ public class PreviewActivity extends AppCompatActivity {
                 rvRequests.setLayoutManager(new LinearLayoutManager(this));
                 rvRequests.setAdapter(historyAdapter);
 
-                // Populate allRequests with dynamic user submissions
-                try {
-                    String userReqsJson = prefs.getString("USER_SUBMITTED_REQUESTS", "[]");
-                    JSONArray userArray = new JSONArray(userReqsJson);
-                    if (userArray.length() > 0) {
-                        allRequests.clear();
-                        for (int i = 0; i < userArray.length(); i++) {
-                            allRequests.add(userArray.getJSONObject(i));
-                        }
-                    }
-                } catch (Exception ignored) {}
+                // Populate allRequests with the user's submissions (newest first, cancelled at the bottom)
+                reloadLocalHistory(prefs);
                 
                 Runnable updateUI = () -> {
+                    HistorySync.sortEntries(allRequests);
                     chipAll.setCardBackgroundColor(Color.parseColor("#FFFFFF"));
                     tvAll.setTextColor(Color.parseColor("#2A3532"));
                     
@@ -2025,8 +2019,8 @@ public class PreviewActivity extends AppCompatActivity {
 
                 updateUI.run();
 
-                // Show what the barangay did on the web portal (in progress, ready for pickup, resolved...)
-                syncHistoryStatuses(prefs, updateUI);
+                // Show what the barangay did (web portal or Supabase): now, every 20 s, and when the app comes back
+                startLiveUpdates(() -> syncHistoryStatuses(prefs, updateUI), 20000);
 
                 chipAll.setOnClickListener(v -> { currentHistoryFilter = "All"; updateUI.run(); });
                 chipDocs.setOnClickListener(v -> { currentHistoryFilter = "Documents"; updateUI.run(); });
@@ -2324,6 +2318,7 @@ public class PreviewActivity extends AppCompatActivity {
 
             JSONObject newReq = new JSONObject();
             newReq.put("local_id", localId);
+            newReq.put("created_at", HistorySync.nowIso());
             newReq.put("requestType", type);
             newReq.put("description", desc);
             newReq.put("dateSubmitted", "Submitted on " + date);
@@ -2462,32 +2457,55 @@ public class PreviewActivity extends AppCompatActivity {
 
         String type = req.optString("requestType", req.optString("type", "Request"));
         String desc = req.optString("description", "");
-        String status = req.optString("statusText", req.optString("status", "Pending"));
+        String statusKey = HistorySync.statusKey(req.optString("status_key", req.optString("status", "pending")));
+        String[] look = HistorySync.statusDisplay(statusKey);
+        String status = look[0];
         String date = req.optString("dateSubmitted", req.optString("date", "Submitted on " + getCurrentFormattedDateTime()));
-        
+
         boolean isDocument = type.contains("Document") || type.contains("ID");
-        String fullDetails;
-        
-        if (isDocument) {
-            String reqId = req.optString("supabase_id", "N/A");
-            String pickupDate = req.optString("pickup_date", "TBA");
-            String adminRemarks = req.optString("admin_remarks", "None");
-            
-            fullDetails = "• Req ID: " + reqId + "\n" +
-                          "• Docu Type: " + type + "\n" +
-                          "• Purpose: " + desc + "\n" +
-                          "• Status: " + status + "\n" +
-                          "• Pickup Date: " + pickupDate + "\n" +
-                          "• Admin Remarks: " + adminRemarks;
-        } else {
-            fullDetails = req.optString("full_details", "• Type: " + type + "\n• Description: " + desc + "\n• Status: " + status);
-        }
+        // What the resident submitted (document type / purpose / applicant, or the report text)
+        String fullDetails = req.optString("full_details", "");
+        if (fullDetails.isEmpty()) fullDetails = "• Type: " + type + "\n• Details: " + desc;
 
         if (tvTitle != null) tvTitle.setText(type);
         if (tvSub != null) tvSub.setText(desc);
-        if (tvStatus != null) tvStatus.setText(status);
+        if (tvStatus != null) {
+            tvStatus.setText(status);
+            tvStatus.setTextColor(Color.parseColor(look[1]));
+        }
+        CardView cardStatus = dialogView.findViewById(R.id.cardDialogStatus);
+        if (cardStatus != null) cardStatus.setCardBackgroundColor(Color.parseColor(look[2]));
         if (tvDate != null) tvDate.setText(date);
         if (tvDetails != null) tvDetails.setText(fullDetails);
+
+        // ---- Latest update from the barangay ----
+        String pickup = req.optString("pickup_date", "");
+        String remarks = req.optString("admin_remarks", "");
+        StringBuilder upd = new StringBuilder();
+        switch (statusKey) {
+            case "approved":         upd.append("Approved by the barangay."); break;
+            case "in_progress":      upd.append("The barangay is working on this."); break;
+            case "ready_for_pickup": upd.append("Ready for pickup at the barangay hall."); break;
+            case "resolved":         upd.append("Resolved by the barangay."); break;
+            case "rejected":         upd.append("Not approved by the barangay."); break;
+            case "cancelled":        upd.append("This request was cancelled."); break;
+            default: break;
+        }
+        if (!pickup.isEmpty() && !"null".equals(pickup)) {
+            if (upd.length() > 0) upd.append("\n");
+            upd.append("Pickup date: ").append(HistorySync.formatIsoDate(pickup, false));
+        }
+        if (!remarks.isEmpty() && !"null".equals(remarks)) {
+            if (upd.length() > 0) upd.append("\n");
+            upd.append("Note: ").append(remarks);
+        }
+        CardView cardUpdate = dialogView.findViewById(R.id.cardDialogUpdate);
+        TextView tvUpdateBody = dialogView.findViewById(R.id.tvDialogUpdateBody);
+        if (cardUpdate != null && tvUpdateBody != null && upd.length() > 0) {
+            cardUpdate.setVisibility(View.VISIBLE);
+            cardUpdate.setCardBackgroundColor(Color.parseColor(look[2]));
+            tvUpdateBody.setText(upd.toString());
+        }
 
         // ---- Uploaded media ----
         JSONArray attachments = req.optJSONArray("attachments");
@@ -2531,13 +2549,13 @@ public class PreviewActivity extends AppCompatActivity {
 
         // ---- Edit (only while still Pending and not a document request) ----
         String editable = req.optString("editable_text", req.optString("full_details", ""));
-        if (btnEdit != null && "Pending".equalsIgnoreCase(status) && !editable.isEmpty() && !isDocument) {
+        if (btnEdit != null && "pending".equals(statusKey) && !editable.isEmpty() && !isDocument) {
             btnEdit.setVisibility(View.VISIBLE);
             btnEdit.setOnClickListener(v -> showEditRequestDialog(req, dialog));
         }
 
         CardView btnCancel = dialogView.findViewById(R.id.btnCancelRequest);
-        if (btnCancel != null && "Pending".equalsIgnoreCase(status)) {
+        if (btnCancel != null && "pending".equals(statusKey)) {
             btnCancel.setVisibility(View.VISIBLE);
             btnCancel.setOnClickListener(v -> showCancelRequestDialog(req, dialog));
         }
@@ -2692,6 +2710,7 @@ public class PreviewActivity extends AppCompatActivity {
                     final String localId = req.optString("local_id", "");
                     updateLocalRequest(localId, o -> {
                         o.put("status", "Cancelled");
+                        o.put("status_key", "cancelled");
                         o.put("statusText", "Cancelled");
                         o.put("statusColorHex", "#CC4E42");
                         o.put("statusBgHex", "#FCEBEA");
@@ -2805,9 +2824,12 @@ public class PreviewActivity extends AppCompatActivity {
     }
 
     private void addHtmlTextViewToContainer(String md, LinearLayout container, float d) {
-        String html = md;
+        // Same rules as the web portal editor. Escape first so "<" or "&" in the text show as typed.
+        String html = md.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         html = html.replaceAll("(?m)^## (.*)$", "<h2>$1</h2>");
         html = html.replaceAll("(?m)^# (.*)$", "<h1>$1</h1>");
+        html = html.replaceAll("(?m)^[-*] (.*)$", "&#8226; $1");
+        html = html.replaceAll("(</h[12]>)\n", "$1");
         html = html.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
         html = html.replaceAll("\\*(.*?)\\*", "<i>$1</i>");
         html = html.replaceAll("__(.*?)__", "<u>$1</u>");
@@ -3491,25 +3513,26 @@ public class PreviewActivity extends AppCompatActivity {
             body = "📅 " + (when.isEmpty() ? eventDate : when) + (time.isEmpty() ? "" : " · " + time) + "\n\n" + body;
         }
         a.put("description", body);
+        a.put("description_plain", plainText(body));
         return a;
+    }
+
+    /** Announcement text without formatting symbols or image links (for the short list preview). */
+    private static String plainText(String md) {
+        String t = md == null ? "" : md;
+        t = t.replaceAll("!\\[[^\\]]*\\]\\([^)]*\\)", "");   // images
+        t = t.replaceAll("(?m)^#{1,2} ", "");                    // headings
+        t = t.replaceAll("(?m)^[-*] ", "\u2022 ");               // bullets
+        t = t.replace("**", "").replace("__", "").replaceAll("(?<![\\w*])\\*(?!\\s)(.*?)\\*", "$1");
+        return t.replaceAll("\n{3,}", "\n\n").trim();
     }
 
     /** "2026-10-05T07:30:00+00:00" or "2026-10-05" -> "Oct 5, 2026" in the phone's time zone. */
     private static String formatIsoDate(String iso, boolean hasTime) {
-        if (iso == null || iso.length() < 10 || "null".equals(iso)) return "";
-        try {
-            Date d;
-            if (hasTime && iso.length() >= 19) {
-                SimpleDateFormat in = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
-                in.setTimeZone(java.util.TimeZone.getTimeZone("UTC")); // Supabase timestamps are UTC
-                d = in.parse(iso.substring(0, 19).replace(' ', 'T'));
-            } else {
-                d = new SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso.substring(0, 10));
-            }
-            return d != null ? new SimpleDateFormat("MMM d, yyyy", Locale.US).format(d) : "";
-        } catch (Exception e) {
-            return iso.substring(0, 10);
-        }
+        if (!hasTime) return HistorySync.formatIsoDate(iso, false);
+        String s = HistorySync.formatIsoDate(iso, true);
+        int dot = s.indexOf(" · ");
+        return dot > 0 ? s.substring(0, dot) : s;   // announcement cards show the date only
     }
 
     private void refreshAnnouncementsUI() {
@@ -3539,6 +3562,7 @@ public class PreviewActivity extends AppCompatActivity {
         clearUserPrefs(ed);
         ed.apply();
         SupabaseClient.clearSession();
+        StatusCheckWorker.cancel(this);
     }
 
     /** Sends a pending user to the review screen, a rejected user back to sign in. */
@@ -3576,97 +3600,165 @@ public class PreviewActivity extends AppCompatActivity {
         });
     }
 
+
+    // ====================================================================
+    // EMERGENCY CONTACTS (public.emergency_contacts)
+    // ====================================================================
+
+    private void loadEmergencyContacts(SharedPreferences prefs) {
+        String code = SupabaseClient.dbPsgc(prefs.getString("USER_BARANGAY_CODE", selectedBarangayCode));
+        SupabaseClient.fetchEmergencyContacts(code, new Callback() {
+            @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                runOnUiThread(() -> {
+                    if (prefs.getString("CACHED_EMERGENCY_CONTACTS", "").isEmpty()) {
+                        TextView status = findViewById(R.id.tvContactsStatus);
+                        if (status != null) status.setText("Couldn't load hotlines. Check your internet connection.");
+                    }
+                });
+            }
+            @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                String body = response.body() != null ? new String(response.body().bytes(), StandardCharsets.UTF_8) : "";
+                if (!response.isSuccessful()) {
+                    android.util.Log.e("EmergencyContacts", "HTTP " + response.code() + ": " + body);
+                    return;
+                }
+                prefs.edit().putString("CACHED_EMERGENCY_CONTACTS", body).apply();
+                runOnUiThread(() -> renderEmergencyContacts(body, false));
+            }
+        });
+    }
+
+    /** Builds the list: Barangay, City / municipality, then Nationwide (rows with no barangay). */
+    private void renderEmergencyContacts(String json, boolean fromCache) {
+        LinearLayout container = findViewById(R.id.layoutEmergencyContacts);
+        TextView status = findViewById(R.id.tvContactsStatus);
+        if (container == null) return;
+        JSONArray rows;
+        try { rows = new JSONArray(json == null || json.isEmpty() ? "[]" : json); } catch (Exception e) { rows = new JSONArray(); }
+
+        java.util.LinkedHashMap<String, List<JSONObject>> groups = new java.util.LinkedHashMap<>();
+        groups.put("Barangay", new ArrayList<>());
+        groups.put("City / Municipality", new ArrayList<>());
+        groups.put("Nationwide", new ArrayList<>());
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject c = rows.optJSONObject(i);
+            if (c == null) continue;
+            String number = firstNonEmpty(c, "phone_number", "contact_number", "number");
+            if (number.isEmpty()) continue;
+            String scope = firstNonEmpty(c, "scope", "category").toLowerCase(Locale.US);
+            String key = c.isNull("psgc_code") || scope.contains("national") ? "Nationwide"
+                    : (scope.contains("city") || scope.contains("municipal") || scope.contains("lgu") ? "City / Municipality" : "Barangay");
+            groups.get(key).add(c);
+        }
+
+        container.removeAllViews();
+        float d = getResources().getDisplayMetrics().density;
+        int shown = 0;
+        for (Map.Entry<String, List<JSONObject>> g : groups.entrySet()) {
+            if (g.getValue().isEmpty()) continue;
+            TextView header = new TextView(this);
+            header.setText(g.getKey() + " Level");
+            header.setTextColor(Color.parseColor("#2A3532"));
+            header.setTextSize(16);
+            header.setTypeface(header.getTypeface(), android.graphics.Typeface.BOLD);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, (int) ((shown == 0 ? 24 : 20) * d), 0, (int) (12 * d));
+            header.setLayoutParams(lp);
+            container.addView(header);
+
+            String bg = "Nationwide".equals(g.getKey()) ? "#FCEBEA" : ("Barangay".equals(g.getKey()) ? "#DDF0EC" : "#FDF1DA");
+            String fg = "Nationwide".equals(g.getKey()) ? "#CC4E42" : ("Barangay".equals(g.getKey()) ? "#247D76" : "#C08A2E");
+            for (JSONObject c : g.getValue()) {
+                View card = getLayoutInflater().inflate(R.layout.item_emergency_contact, container, false);
+                String name = firstNonEmpty(c, "name");
+                String number = firstNonEmpty(c, "phone_number", "contact_number", "number");
+                ((TextView) card.findViewById(R.id.tvContactName)).setText(name.isEmpty() ? "Hotline" : name);
+                ((TextView) card.findViewById(R.id.tvContactNumber)).setText(number);
+                ((CardView) card.findViewById(R.id.cardContactIcon)).setCardBackgroundColor(Color.parseColor(bg));
+                ((ImageView) card.findViewById(R.id.ivContactIcon)).setColorFilter(Color.parseColor(fg));
+                card.setContentDescription("Call " + name + ", " + number);
+                card.setOnClickListener(v -> dialNumber(number.replaceAll("[^0-9+]", "")));
+                container.addView(card);
+                shown++;
+            }
+        }
+        if (status != null) {
+            if (shown > 0) {
+                status.setVisibility(View.GONE);
+            } else {
+                status.setVisibility(View.VISIBLE);
+                status.setText(fromCache ? "Loading hotlines..."
+                        : "Your barangay hasn't added emergency hotlines yet. In an emergency, contact your barangay hall directly.");
+            }
+        }
+    }
+
     // ====================================================================
     // HISTORY: pull the barangay's status updates for the user's submissions
     // ====================================================================
 
-    private static String[] statusDisplay(String status) {
-        String s = status == null ? "" : status.trim().toLowerCase(Locale.US);
-        switch (s) {
-            case "in_progress":      return new String[]{"In Progress", "#247D76", "#DDF0EC"};
-            case "ready_for_pickup": return new String[]{"Ready for Pickup", "#247D76", "#DDF0EC"};
-            case "resolved":         return new String[]{"Resolved", "#8D9691", "#DFE2DD"};
-            case "rejected":         return new String[]{"Rejected", "#CC4E42", "#FCEBEA"};
-            case "cancelled":        return new String[]{"Cancelled", "#8D9691", "#DFE2DD"};
-            default:                 return new String[]{"Pending", "#DBA03B", "#FDF1DA"};
-        }
-    }
-
-    /** Reloads the saved history from prefs into allRequests. */
+    /** Reloads the saved history (newest first, cancelled at the bottom) into allRequests. */
     private void reloadLocalHistory(SharedPreferences prefs) {
         try {
             JSONArray userArray = new JSONArray(prefs.getString("USER_SUBMITTED_REQUESTS", "[]"));
             allRequests.clear();
             for (int i = 0; i < userArray.length(); i++) allRequests.add(userArray.getJSONObject(i));
+            HistorySync.sortEntries(allRequests);
         } catch (Exception ignored) {}
     }
 
-    /** Asks Supabase for the current status of every synced submission, saves it, then runs onDone on the UI thread. */
+    /**
+     * Pulls the user's reports + requests from Supabase (source of truth), updates History,
+     * notifies the phone about anything the barangay changed, then runs onDone on the UI thread.
+     */
     private void syncHistoryStatuses(SharedPreferences prefs, Runnable onDone) {
-        Map<String, List<String>> idsByTable = new HashMap<>();
-        try {
-            JSONArray arr = new JSONArray(prefs.getString("USER_SUBMITTED_REQUESTS", "[]"));
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                String id = o.optString("supabase_id", "");
-                if (id.isEmpty()) continue;
-                String table = o.optString("supabase_table", "requests");
-                if (!idsByTable.containsKey(table)) idsByTable.put(table, new ArrayList<>());
-                idsByTable.get(table).add(id);
-            }
-        } catch (Exception e) {
-            return;
-        }
-
-        for (Map.Entry<String, List<String>> entry : idsByTable.entrySet()) {
-            final String table = entry.getKey();
-            SupabaseClient.fetchSubmissionStatuses(table, entry.getValue(), new Callback() {
-                @Override public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                    android.util.Log.w("HistorySync", table + ": " + e.getMessage());
-                }
-                @Override public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                    String body = response.body() != null ? new String(response.body().bytes(), StandardCharsets.UTF_8) : "";
-                    if (!response.isSuccessful()) {
-                        android.util.Log.w("HistorySync", table + " HTTP " + response.code() + ": " + body);
-                        return;
-                    }
-                    try {
-                        JSONArray rows = new JSONArray(body);
-                        Map<String, JSONObject> byId = new HashMap<>();
-                        for (int i = 0; i < rows.length(); i++) {
-                            JSONObject r = rows.getJSONObject(i);
-                            byId.put(r.optString("id"), r);
-                        }
-                        synchronized (PreviewActivity.this) {
-                            JSONArray saved = new JSONArray(prefs.getString("USER_SUBMITTED_REQUESTS", "[]"));
-                            for (int i = 0; i < saved.length(); i++) {
-                                JSONObject o = saved.getJSONObject(i);
-                                if (!table.equals(o.optString("supabase_table", "requests"))) continue;
-                                JSONObject r = byId.get(o.optString("supabase_id"));
-                                if (r == null) continue;
-                                String[] d = statusDisplay(r.optString("status"));
-                                String text = d[0];
-                                String pickup = r.isNull("pickup_date") ? "" : r.optString("pickup_date", "");
-                                if (!pickup.isEmpty()) text += " · Pickup " + formatIsoDate(pickup, false);
-                                o.put("status", d[0]);
-                                o.put("statusText", text);
-                                o.put("statusColorHex", d[1]);
-                                o.put("statusBgHex", d[2]);
-                                String remarks = r.isNull("admin_remarks") ? "" : r.optString("admin_remarks", "");
-                                if (!remarks.isEmpty()) o.put("admin_remarks", remarks);
-                            }
-                            prefs.edit().putString("USER_SUBMITTED_REQUESTS", saved.toString()).apply();
-                        }
-                        runOnUiThread(() -> {
-                            reloadLocalHistory(prefs);
-                            if (onDone != null) onDone.run();
-                        });
-                    } catch (Exception e) {
-                        android.util.Log.w("HistorySync", "parse: " + e.getMessage());
-                    }
-                }
+        final android.content.Context appCtx = getApplicationContext();
+        new Thread(() -> {
+            List<HistorySync.Update> updates = HistorySync.syncBlocking(appCtx);
+            if (updates == null) return;
+            HistorySync.notifyUpdates(appCtx, updates);
+            runOnUiThread(() -> {
+                reloadLocalHistory(prefs);
+                if (onDone != null) onDone.run();
             });
+        }).start();
+    }
+
+    // ====================================================================
+    // LIVE UPDATES: re-check Supabase while a screen is open
+    //   History: every 20 s · Dashboard / Announcements: every 60 s · and every time the app comes back
+    // ====================================================================
+    private final Handler liveHandler = new Handler(Looper.getMainLooper());
+    private Runnable liveTask;
+    private long liveIntervalMs = 0;
+
+    private void startLiveUpdates(Runnable task, long intervalMs) {
+        liveTask = task;
+        liveIntervalMs = intervalMs;
+    }
+
+    private final Runnable liveLoop = new Runnable() {
+        @Override public void run() {
+            if (liveTask == null) return;
+            liveTask.run();
+            liveHandler.postDelayed(this, liveIntervalMs);
         }
+    };
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (liveTask != null) {
+            liveHandler.removeCallbacks(liveLoop);
+            liveHandler.post(liveLoop);       // refresh right away when the user comes back
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        liveHandler.removeCallbacks(liveLoop);
     }
 
     // ====================================================================
@@ -4064,6 +4156,10 @@ public class PreviewActivity extends AppCompatActivity {
 
         SharedPreferences.Editor ed = prefs.edit();
         clearUserPrefs(ed); // never keep the previous account's address
+        if (!userId.isEmpty() && !userId.equals(prefs.getString("HISTORY_OWNER_ID", ""))) {
+            // another account signed in on this phone: its history comes from Supabase, not the previous user's
+            ed.remove("USER_SUBMITTED_REQUESTS").remove("CACHED_EMERGENCY_CONTACTS").putString("HISTORY_OWNER_ID", userId);
+        }
         ed.putBoolean("IS_LOGGED_IN", false); // only set to true once the profile says "approved"
         if (!userId.isEmpty()) ed.putString("USER_ID", userId);
         if (!emailStr.isEmpty()) ed.putString("USER_EMAIL", emailStr);

@@ -23,4 +23,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Barangay_superAPP"
-include(":app")
+include(":app", ":web")
