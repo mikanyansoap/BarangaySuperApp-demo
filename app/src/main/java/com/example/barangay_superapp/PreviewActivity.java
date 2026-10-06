@@ -1136,6 +1136,8 @@ public class PreviewActivity extends AppCompatActivity {
                     String gender = HintAdapter.getValue(spinnerGender);
                     String civilStatus = HintAdapter.getValue(spinnerCivilStatus);
                     String idType = HintAdapter.getValue(spinnerIdType);
+                    TextView tvUploadIdText = findViewById(R.id.tvUploadIdText);
+                    String idPhotoUrl = (tvUploadIdText != null && tvUploadIdText.getTag() != null) ? tvUploadIdText.getTag().toString() : "";
                     EditText etStreet = findViewById(R.id.etAddress);
                     String street = etStreet != null ? etStreet.getText().toString().trim() : "";
                     String province = TextFix.fix(spinnerProvince != null ? spinnerProvince.getText().toString().trim() : "");
@@ -1216,6 +1218,9 @@ public class PreviewActivity extends AppCompatActivity {
                         userData.put("current_address", fullAddress);
                         userData.put("provincial_address", province);
                         userData.put("id_type", idType);
+                        if (!idPhotoUrl.isEmpty()) {
+                            userData.put("id_photo_url", idPhotoUrl);
+                        }
                         // No role / approval status here: the database makes every new account a
                         // pending resident, and only an official of this barangay can approve it.
 
