@@ -35,3 +35,8 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Secrets
+**/firebase-service-account.json
+**/*service-account*.json
+web/
