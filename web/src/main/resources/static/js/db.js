@@ -433,7 +433,7 @@ export const DataService = {
     if (role) q = role === 'official' ? q.not('role', 'in', '(resident,db_admin,super_admin,superadmin)') : q.eq('role', role);
     if (status) q = q.eq('account_status', status);
     const t = String(search || '').trim().replace(/[,()%]/g, ' ');
-    if (t) q = q.or(`email.ilike.%${t}%,first_name.ilike.%${t}%,last_name.ilike.%${t}%`);
+    if (t) q = q.or(`email.ilike.%${t}%,first_name.ilike.%${t}%,last_name.ilike.%${t}%,mobile_number.ilike.%${t}%,current_address.ilike.%${t}%`);
     const { data, error } = await q;
     if (error) throw error;
     return data || [];

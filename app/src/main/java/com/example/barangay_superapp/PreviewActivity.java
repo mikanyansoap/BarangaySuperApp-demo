@@ -705,14 +705,19 @@ public class PreviewActivity extends AppCompatActivity {
                     // Goes to public.reports (what the barangay web admin reads)
                     String reportDesc = details + "\n\nLocation: " + locAddress
                             + (locationPinned ? String.format(Locale.US, "\nMap pin: %.6f, %.6f", selectedLat, selectedLng) : "");
-                    SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Complaint", cat, reportDesc, "medium",
-                            firstRemoteUrl(attachments),
-                            locationPinned ? Double.valueOf(selectedLat) : null,
-                            locationPinned ? Double.valueOf(selectedLng) : null,
-                            locAddress, rememberSupabaseId(localId, "reports"));
-
-                    Toast.makeText(this, "Report Submitted Successfully! (" + reqId + ")", Toast.LENGTH_LONG).show();
-                    launchPreview(R.layout.request_history);
+                    
+                    ReportAssistant.assessSeverity("Complaint", cat, reportDesc, priority -> {
+                        SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Complaint", cat, reportDesc, priority,
+                                firstRemoteUrl(attachments),
+                                locationPinned ? Double.valueOf(selectedLat) : null,
+                                locationPinned ? Double.valueOf(selectedLng) : null,
+                                locAddress, rememberSupabaseId(localId, "reports"));
+                        
+                        runOnUiThread(() -> {
+                            Toast.makeText(PreviewActivity.this, "Report Submitted Successfully! (" + reqId + ")", Toast.LENGTH_LONG).show();
+                            launchPreview(R.layout.request_history);
+                        });
+                    });
                 });
             }
         }
@@ -788,14 +793,19 @@ public class PreviewActivity extends AppCompatActivity {
                     String userId = prefs.getString("USER_ID", "");
                     String disasterDesc = detailsText + "\n\nLocation: " + finalLoc
                             + (locationPinned ? String.format(Locale.US, "\nMap pin: %.6f, %.6f", selectedLat, selectedLng) : "");
-                    SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Incident", disasterType, disasterDesc, "high",
-                            firstRemoteUrl(attachments),
-                            locationPinned ? Double.valueOf(selectedLat) : null,
-                            locationPinned ? Double.valueOf(selectedLng) : null,
-                            finalLoc, rememberSupabaseId(localId, "reports"));
-
-                    Toast.makeText(this, "Disaster Incident Reported! (" + reqId + ")", Toast.LENGTH_LONG).show();
-                    launchPreview(R.layout.request_history);
+                    
+                    ReportAssistant.assessSeverity("Incident", disasterType, disasterDesc, priority -> {
+                        SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Incident", disasterType, disasterDesc, priority,
+                                firstRemoteUrl(attachments),
+                                locationPinned ? Double.valueOf(selectedLat) : null,
+                                locationPinned ? Double.valueOf(selectedLng) : null,
+                                finalLoc, rememberSupabaseId(localId, "reports"));
+                        
+                        runOnUiThread(() -> {
+                            Toast.makeText(PreviewActivity.this, "Disaster Incident Reported! (" + reqId + ")", Toast.LENGTH_LONG).show();
+                            launchPreview(R.layout.request_history);
+                        });
+                    });
                 });
             }
         }

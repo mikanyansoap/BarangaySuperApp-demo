@@ -142,6 +142,30 @@ public final class ReportAssistant {
         return false;
     }
 
+    public interface SeverityCallback {
+        void onSeverity(String priority);
+    }
+
+    public static void assessSeverity(String type, String category, String description, SeverityCallback callback) {
+        if (!GeminiApiClient.isConfigured()) {
+            callback.onSeverity(type.equalsIgnoreCase("Incident") ? "high" : "medium");
+            return;
+        }
+        String prompt = "Rate the emergency severity of this barangay report as exactly 'low', 'medium', or 'high'. Reply with ONLY ONE WORD.\n" +
+            "Type: " + type + "\nCategory: " + category + "\nDetails: " + description;
+        GeminiApiClient.generate(prompt, false, new GeminiApiClient.ChatCallback() {
+            @Override public void onSuccess(String r) {
+                String s = r.trim().toLowerCase(Locale.ROOT);
+                if (s.contains("high")) callback.onSeverity("high");
+                else if (s.contains("low")) callback.onSeverity("low");
+                else callback.onSeverity("medium");
+            }
+            @Override public void onError(String e) {
+                callback.onSeverity(type.equalsIgnoreCase("Incident") ? "high" : "medium");
+            }
+        });
+    }
+    
     /** Keyword-based drafter used when Gemini isn't configured or fails. */
     public static Draft localDraft(String[] answers) {
         String what = safe(answers, 0), where = safe(answers, 1), when = safe(answers, 2),

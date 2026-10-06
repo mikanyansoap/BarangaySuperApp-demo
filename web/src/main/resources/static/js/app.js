@@ -317,8 +317,9 @@ function shell(mainHtml, active) {
     ['announcements', 'megaphone', 'Announcements'],
     ['emergency', 'phone', 'Emergency contacts']
   ];
+  navItems.push(['users', 'user', 'Users & officials']);
   if (user.isSuperAdmin) {
-    navItems.push(['users', 'user', 'Users & officials'], ['barangays', 'building', 'Barangays']);
+    navItems.push(['barangays', 'building', 'Barangays']);
   }
 
   const nav = navItems.map(([key, icon, label]) => `
@@ -372,7 +373,7 @@ async function showScreen(screen, param) {
   }
   if (screen !== 'login' && !(await refreshSession())) return;
   const user = getActiveUser();
-  if (['users', 'barangays'].includes(screen) && !user.isSuperAdmin) screen = 'dashboard';
+  if (screen === 'barangays' && !user.isSuperAdmin) screen = 'dashboard';
   currentScreen = screen;
   currentParam = param;
 
@@ -545,11 +546,12 @@ async function renderDashboard() {
     const key = localDateString(d);
     trendPoints.push({
       day: d.toLocaleString('en-US', { weekday: 'short' }),
-      val: reports.filter(r => r.created_at && localDateString(new Date(r.created_at)) === key).length
+      valC: reports.filter(r => r.created_at && localDateString(new Date(r.created_at)) === key && (r.category || '').toLowerCase() === 'complaint').length,
+      valI: reports.filter(r => r.created_at && localDateString(new Date(r.created_at)) === key && (r.category || '').toLowerCase() === 'incident').length
     });
   }
 
-  const maxVal = Math.max(4, ...trendPoints.map(p => p.val));
+  const maxVal = Math.max(4, ...trendPoints.map(p => Math.max(p.valC, p.valI)));
   const chartHeight = 110;
   const chartWidth = 400;
   const startX = 30;
@@ -557,12 +559,14 @@ async function renderDashboard() {
 
   const coords = trendPoints.map((p, i) => {
     const x = startX + (i * stepX);
-    const y = chartHeight - (p.val / maxVal * (chartHeight - 20)) + 10;
-    return { x, y, ...p };
+    const yC = chartHeight - (p.valC / maxVal * (chartHeight - 20)) + 10;
+    const yI = chartHeight - (p.valI / maxVal * (chartHeight - 20)) + 10;
+    return { x, yC, yI, ...p };
   });
 
-  const linePath = coords.map((c, i) => (i === 0 ? `M ${c.x} ${c.y}` : `L ${c.x} ${c.y}`)).join(' ');
-  const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${chartHeight + 15} L ${coords[0].x} ${chartHeight + 15} Z`;
+  const linePathC = coords.map((c, i) => (i === 0 ? `M ${c.x} ${c.yC}` : `L ${c.x} ${c.yC}`)).join(' ');
+  const linePathI = coords.map((c, i) => (i === 0 ? `M ${c.x} ${c.yI}` : `L ${c.x} ${c.yI}`)).join(' ');
+  const areaPath = `${linePathC} L ${coords[coords.length - 1].x} ${chartHeight + 15} L ${coords[0].x} ${chartHeight + 15} Z`;
 
   const donutTotal = newReports + resolved;
   const pendingArc = donutTotal ? (newReports / donutTotal) * 97.4 : 0;
@@ -616,12 +620,18 @@ async function renderDashboard() {
             <text x="12" y="79" font-size="10" fill="#94a3b8">${Math.round(maxVal / 2)}</text>
             <text x="12" y="124" font-size="10" fill="#94a3b8">0</text>
             <path d="${areaPath}" fill="url(#lineGrad)" />
-            <path d="${linePath}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="${linePathC}" fill="none" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="${linePathI}" fill="none" stroke="#C1483A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
             ${coords.map(c => `
-              <circle cx="${c.x}" cy="${c.y}" r="4.5" fill="#0f766e" stroke="#ffffff" stroke-width="2"><title>${c.val} report(s)</title></circle>
+              <circle cx="${c.x}" cy="${c.yC}" r="4" fill="#0f766e" stroke="#ffffff" stroke-width="1.5"><title>${c.valC} report(s)</title></circle>
+              <circle cx="${c.x}" cy="${c.yI}" r="4" fill="#C1483A" stroke="#ffffff" stroke-width="1.5"><title>${c.valI} incident(s)</title></circle>
               <text x="${c.x}" y="142" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">${esc(c.day)}</text>
             `).join('')}
           </svg>
+        </div>
+        <div style="display:flex; gap:16px; font-size:11px; margin-top:6px; color:var(--muted); justify-content:center;">
+          <div style="display:flex; align-items:center; gap:6px;"><span style="width:10px; height:10px; background:#0f766e; border-radius:50%;"></span> Reports</div>
+          <div style="display:flex; align-items:center; gap:6px;"><span style="width:10px; height:10px; background:#C1483A; border-radius:50%;"></span> Incidents</div>
         </div>
       </div>
 
@@ -1663,17 +1673,29 @@ async function renderUsers() {
   const scope = userFilters.allBarangays ? null : user.psgcCode;
   const people = await load('users', () => DataService.listProfiles({ ...userFilters, psgcCode: scope }), []);
   const labels = await DataService.getBarangayLabels(people.map(p => p.psgc_code));
+  
+  // Sort by Region > City > Barangay (using the labels alphabetically)
+  people.sort((a, b) => (labels[a.psgc_code] || '').localeCompare(labels[b.psgc_code] || ''));
 
   const rows = people.map(p => {
     const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || '(no name)';
     return `
-      <tr class="row-link" data-user-id="${esc(p.id)}">
+      <tr>
         <td><div class="name-cell"><div class="ic" style="background:var(--teal-100);color:var(--teal-800);">${ic('user')}</div>
           <div><div class="t">${esc(name)}</div><div class="s">${esc(p.email || '')}</div></div></div></td>
         <td>${roleBadge(p.role)}</td>
         <td><span class="pill ${cssToken(p.account_status, 'pending')}">${esc(statusLabel(p.account_status))}</span></td>
         <td style="font-size:12px;">${p.psgc_code ? esc(labels[p.psgc_code] || p.psgc_code) : '<span style="color:var(--muted);">— none —</span>'}</td>
-        <td style="text-align:right;color:var(--muted);">${ic('chevron')}</td>
+        <td style="text-align:right;">
+          ${user.isSuperAdmin ? `
+            <select class="user-action-select field" data-id="${esc(p.id)}" style="padding: 4px 8px; font-size:12px; height:auto; display:inline-block; width:auto;">
+              <option value="">Manage...</option>
+              <option value="edit">Edit roles &amp; info</option>
+            </select>
+          ` : `
+            <button class="btn-small ghost view-user-btn" data-id="${esc(p.id)}">View</button>
+          `}
+        </td>
       </tr>`;
   }).join('');
 
@@ -1684,6 +1706,7 @@ async function renderUsers() {
         <p>Set who is a resident, a barangay official or a super admin, approve accounts, and move people to another barangay.
            New accounts are created in Supabase (Authentication → Add user) or by signing up in the app, then managed here.</p>
       </div>
+      ${user.isSuperAdmin ? `<button class="btn-small" id="btn-add-user">+ Add User</button>` : ''}
     </div>
     <div class="filters">
       <input id="u-search" placeholder="Search name or email..." value="${esc(userFilters.search)}">
@@ -1719,15 +1742,35 @@ async function renderUsers() {
   const all = document.getElementById('u-all');
   if (all) all.onchange = (e) => { userFilters.allBarangays = e.target.checked; renderUsers(); };
 
-  document.querySelectorAll('[data-user-id]').forEach(row => {
-    row.onclick = () => {
-      const person = people.find(p => p.id === row.dataset.userId);
-      if (person) openUserEditor(person, labels[person.psgc_code]);
+  if (user.isSuperAdmin) {
+    document.querySelectorAll('.user-action-select').forEach(sel => {
+      sel.onchange = (e) => {
+        const action = e.target.value;
+        e.target.value = ''; // reset
+        if (!action) return;
+        const person = people.find(p => p.id === sel.dataset.id);
+        if (person && action === 'edit') openUserEditor(person, labels[person.psgc_code], false);
+      };
+    });
+    document.getElementById('btn-add-user').onclick = () => {
+      openCustomModal({
+        title: 'Add a new user',
+        contentHtml: '<p style="font-size:13px;color:var(--charcoal);line-height:1.5;">To create a new user account, please use the <b>Supabase Dashboard (Authentication &rarr; Add User)</b> or have the user sign up via the mobile app. Once they have an account, you can manage their roles and barangay here.</p>',
+        hideCancel: true,
+        confirmText: 'Got it'
+      });
     };
-  });
+  } else {
+    document.querySelectorAll('.view-user-btn').forEach(btn => {
+      btn.onclick = () => {
+        const person = people.find(p => p.id === btn.dataset.id);
+        if (person) openUserEditor(person, labels[person.psgc_code], true);
+      };
+    });
+  }
 }
 
-function openUserEditor(person, currentLabel) {
+function openUserEditor(person, currentLabel, readOnly = false) {
   const me = getActiveUser();
   const isMe = person.id === me.id;
   let chosen = person.psgc_code ? { psgc_code: person.psgc_code, label: currentLabel || person.psgc_code } : null;
@@ -1741,36 +1784,38 @@ function openUserEditor(person, currentLabel) {
       <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">${esc(person.email || '')}${person.mobile_number ? ` · ${esc(person.mobile_number)}` : ''}</p>
       <div class="modal-form-group">
         <label>Role</label>
-        <select class="field" id="ue-role" ${isMe ? 'disabled' : ''}>
+        <select class="field" id="ue-role" ${isMe || readOnly ? 'disabled' : ''}>
           ${ROLE_OPTIONS.map(([v, l]) => `<option value="${v}" ${role === v || (v === 'official' && !['resident', 'db_admin', 'super_admin', 'superadmin'].includes(role)) ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
-        ${isMe ? '<p class="brgy-hint">You can\'t change your own role.</p>' : ''}
+        ${isMe && !readOnly ? '<p class="brgy-hint">You can\'t change your own role.</p>' : ''}
       </div>
       <div class="modal-form-group">
         <label>Account status</label>
-        <select class="field" id="ue-status">
+        <select class="field" id="ue-status" ${readOnly ? 'disabled' : ''}>
           ${STATUS_OPTIONS.map(([v, l]) => `<option value="${v}" ${String(person.account_status || 'pending').toLowerCase() === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
       </div>
       <div class="modal-form-group">
         <label>Barangay</label>
         <div class="brgy-current" id="ue-brgy-current"></div>
-        ${barangaySearchHtml('ue', 'Search to change the barangay...')}
+        ${readOnly ? '' : barangaySearchHtml('ue', 'Search to change the barangay...')}
       </div>`,
-    confirmText: 'Save changes',
+    confirmText: readOnly ? 'Close' : 'Save changes',
+    hideCancel: readOnly,
     onOpen: () => {
       const cur = document.getElementById('ue-brgy-current');
       const paint = () => {
         cur.innerHTML = chosen
-          ? `<b>${esc(chosen.label)}</b> <small>${esc(chosen.psgc_code)}</small> <button type="button" class="link-btn" id="ue-clear">Remove</button>`
+          ? `<b>${esc(chosen.label)}</b> <small>${esc(chosen.psgc_code)}</small> ${readOnly ? '' : `<button type="button" class="link-btn" id="ue-clear">Remove</button>`}`
           : '<span style="color:var(--muted);">No barangay (only allowed for super admins)</span>';
         const clr = document.getElementById('ue-clear');
-        if (clr) clr.onclick = () => { chosen = null; paint(); };
+        if (clr && !readOnly) clr.onclick = () => { chosen = null; paint(); };
       };
       paint();
-      wireBarangaySearch('ue', (b) => { chosen = { psgc_code: b.psgc_code, label: barangayLabel(b) }; paint(); });
+      if (!readOnly) wireBarangaySearch('ue', (b) => { chosen = { psgc_code: b.psgc_code, label: barangayLabel(b) }; paint(); });
     },
     onConfirm: async () => {
+      if (readOnly) { closeModal(); return; }
       const newRole = isMe ? person.role : document.getElementById('ue-role').value;
       if (newRole !== 'db_admin' && !chosen) throw new Error('Residents and officials need a barangay.');
       await DataService.updateProfileAdmin(person.id, {
