@@ -222,6 +222,30 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- Civil Status -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Civil status"
+                    android:textColor="#2A3532"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp">
+                    <Spinner
+                        android:id="@+id/spinnerCivilStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:paddingHorizontal="12dp" />
+                </androidx.cardview.widget.CardView>
+
                 <!-- Place of Birth -->
                 <TextView
                     android:layout_width="wrap_content"
