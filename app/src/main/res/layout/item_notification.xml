@@ -63,12 +63,13 @@
                 app:cardElevation="0dp">
 
                 <!-- Placeholder for the actual icon -->
-                <View
+                <ImageView
                     android:id="@+id/iconImage"
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:layout_gravity="center"
-                    android:background="#247D76" />
+                    android:src="@drawable/ic_speaker"
+                    app:tint="#247D76" />
             </androidx.cardview.widget.CardView>
 
             <!-- Unread Dot (Top Right) -->

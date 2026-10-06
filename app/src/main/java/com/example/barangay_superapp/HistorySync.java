@@ -73,9 +73,11 @@ public final class HistorySync {
     /** {label, text colour, background colour} for a database status. */
     public static String[] statusDisplay(String status) {
         switch (statusKey(status)) {
+            case "waiting_for_confirmation": return new String[]{"Waiting for confirmation", "#DBA03B", "#FDF1DA"};
             case "approved":         return new String[]{"Approved", "#2F7D5B", "#DDF0E4"};
             case "in_progress":      return new String[]{"In Progress", "#247D76", "#DDF0EC"};
             case "ready_for_pickup": return new String[]{"Ready for Pickup", "#247D76", "#DDF0EC"};
+            case "complete":         return new String[]{"Complete", "#2F7D5B", "#DDF0E4"};
             case "resolved":         return new String[]{"Resolved", "#8D9691", "#DFE2DD"};
             case "rejected":         return new String[]{"Rejected", "#CC4E42", "#FCEBEA"};
             case "cancelled":        return new String[]{"Cancelled", "#8D9691", "#DFE2DD"};
@@ -128,8 +130,10 @@ public final class HistorySync {
 
     public static void sortEntries(List<JSONObject> list) {
         Collections.sort(list, (x, y) -> {
-            boolean cx = "cancelled".equals(statusKey(x.optString("status_key", x.optString("status"))));
-            boolean cy = "cancelled".equals(statusKey(y.optString("status_key", y.optString("status"))));
+            String kx = statusKey(x.optString("status_key", x.optString("status")));
+            String ky = statusKey(y.optString("status_key", y.optString("status")));
+            boolean cx = kx.equals("cancelled") || kx.equals("complete") || kx.equals("resolved") || kx.equals("rejected");
+            boolean cy = ky.equals("cancelled") || ky.equals("complete") || ky.equals("resolved") || ky.equals("rejected");
             if (cx != cy) return cx ? 1 : -1;
             String tx = x.optString("created_at", ""), ty = y.optString("created_at", "");
             if (tx.isEmpty() != ty.isEmpty()) return tx.isEmpty() ? -1 : 1;   // not yet on the server = just sent

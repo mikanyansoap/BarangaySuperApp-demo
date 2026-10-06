@@ -18,6 +18,16 @@ public class AdminController {
     @Autowired
     private ProfileRepository profileRepository;
 
+    @Autowired
+    private com.barangay.portal.service.GeminiTriageService geminiService;
+
+    @PostMapping("/ai-summary")
+    public ResponseEntity<Map<String, String>> getSummary(@RequestBody Map<String, String> payload) {
+        String text = payload.get("dataText");
+        String summary = geminiService.generateSummary(text != null ? text : "");
+        return ResponseEntity.ok(Map.of("summary", summary));
+    }
+
     @GetMapping("/pending-accounts")
     public ResponseEntity<List<Profile>> getPendingAccounts(@RequestParam String psgcCode) {
         List<Profile> pendingProfiles = profileRepository.findByPsgcCodeAndAccountStatus(psgcCode, "pending");

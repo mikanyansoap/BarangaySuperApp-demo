@@ -114,4 +114,32 @@ public class GeminiTriageService {
 
         return new TriageResult(true, 50, "MEDIUM", "Automated AI triage was temporarily unavailable; routed for manual review.");
     }
+
+    public String generateSummary(String dataText) {
+        String endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+
+        String prompt = "You are a Barangay AI Assistant analyzing recent reports and incidents. Keep it brief (2-3 sentences), professional, and mention key trends based on the data provided.\nData:\n" + dataText;
+
+        Map<String, Object> part = Collections.singletonMap("text", prompt);
+        Map<String, Object> contents = Collections.singletonMap("parts", Collections.singletonList(part));
+        Map<String, Object> requestBody = Collections.singletonMap("contents", Collections.singletonList(contents));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(endpoint, entity, String.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                String body = response.getBody();
+                Matcher textMatcher = Pattern.compile("\"text\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+                if (textMatcher.find()) {
+                    return textMatcher.group(1).replace("\\n", "\n").replace("\\\"", "\"");
+                }
+            }
+        } catch (Exception ex) {
+            System.err.println("Gemini Summary error: " + ex.getMessage());
+        }
+        return "AI Summary is temporarily unavailable.";
+    }
 }

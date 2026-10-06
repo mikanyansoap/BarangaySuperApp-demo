@@ -29,10 +29,14 @@ public class GeminiApiClient {
         void onError(String errorMessage);
     }
 
-    public static void sendMessage(String userMessage, ChatCallback callback) {
+    public static void sendMessage(String userMessage, String extraContext, ChatCallback callback) {
         try {
             // Context system instruction for Barangay Assistant Persona
-            String systemContext = "You are a helpful and polite Barangay SuperApp AI Assistant in the Philippines. Answer concisely in Taglish/Filipino regarding barangay clearance, document renewal, disaster reports, blotter complaints, and office hours (Mon-Fri 8AM-5PM).\nUser question: ";
+            String systemContext = "You are a helpful and polite Barangay SuperApp AI Assistant in the Philippines. Answer concisely in Taglish/Filipino regarding barangay clearance, document renewal, disaster reports, blotter complaints, and office hours (Mon-Fri 8AM-5PM).\n";
+            if (extraContext != null && !extraContext.isEmpty()) {
+                systemContext += "Current Context (Announcements, Requests, Contacts):\n" + extraContext + "\n";
+            }
+            systemContext += "User question: ";
 
             // Build the JSON request body as Gemini expects
             JSONObject textPart = new JSONObject().put("text", systemContext + userMessage);
@@ -107,6 +111,52 @@ public class GeminiApiClient {
                     .addHeader("X-goog-api-key", API_KEY)
                     .post(RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8")))
                     .build();
+            client.newCall(request).enqueue(new Callback() {
+                @Override public void onFailure(Call call, IOException e) {
+                    callback.onError(e.getMessage() != null ? e.getMessage() : "Network error");
+                }
+                @Override public void onResponse(Call call, Response response) throws IOException {
+                    String body = response.body() != null ? new String(response.body().bytes(), java.nio.charset.StandardCharsets.UTF_8) : "";
+                    if (!response.isSuccessful()) {
+                        callback.onError("HTTP " + response.code());
+                        return;
+                    }
+                    try {
+                        String text = new JSONObject(body).getJSONArray("candidates").getJSONObject(0)
+                                .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text");
+                        callback.onSuccess(text.trim());
+                    } catch (Exception e) {
+                        callback.onError("Bad response");
+                    }
+                }
+            });
+        } catch (Exception e) {
+            callback.onError(e.getMessage());
+        }
+    }
+
+    public static void extractIdDetails(byte[] imageBytes, String mimeType, ChatCallback callback) {
+        if (!isConfigured()) {
+            callback.onError("API key not set");
+            return;
+        }
+        try {
+            JSONObject inlineData = new JSONObject();
+            inlineData.put("mimeType", mimeType);
+            inlineData.put("data", android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP));
+
+            JSONObject imagePart = new JSONObject().put("inlineData", inlineData);
+            JSONObject textPart = new JSONObject().put("text", "Extract the ID Number or Document Number from this ID card. Reply with ONLY the number and nothing else. If you cannot find one, reply with nothing.");
+            
+            JSONObject partsObj = new JSONObject().put("parts", new JSONArray().put(textPart).put(imagePart));
+            JSONObject bodyJson = new JSONObject().put("contents", new JSONArray().put(partsObj));
+
+            Request request = new Request.Builder()
+                    .url(URL + "?key=" + API_KEY)
+                    .addHeader("Content-Type", "application/json")
+                    .post(RequestBody.create(bodyJson.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .build();
+
             client.newCall(request).enqueue(new Callback() {
                 @Override public void onFailure(Call call, IOException e) {
                     callback.onError(e.getMessage() != null ? e.getMessage() : "Network error");

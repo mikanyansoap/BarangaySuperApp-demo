@@ -2,6 +2,7 @@ package com.example.barangay_superapp;
 
 import android.app.DatePickerDialog;
 import android.graphics.Color;
+import java.util.Collections;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -312,6 +313,8 @@ public class PreviewActivity extends AppCompatActivity {
                                 String fileName = (uploaderId.isEmpty() ? "" : uploaderId + "/") + targetBucket + "_" + System.currentTimeMillis() + ext;
 
                                 final Uri finalUri = selectedFileUri;
+                                final byte[] finalFileBytes = fileBytes;
+                                final String finalMime = mime;
                                 // Uses the signed-in user's JWT (auto-refreshed) instead of the anon key
                                 SupabaseClient.uploadToStorageBucket(targetBucket, fileName, fileBytes, mime, new SupabaseClient.StorageUploadCallback() {
                                     @Override
@@ -321,6 +324,26 @@ public class PreviewActivity extends AppCompatActivity {
                                             targetTv.setText("✓ Uploaded: " + fileName.substring(fileName.lastIndexOf('/') + 1));
                                             targetTv.setTextColor(Color.parseColor("#1B5E20"));
                                             Toast.makeText(PreviewActivity.this, "Successfully saved to Supabase bucket (" + targetBucket + ")!", Toast.LENGTH_SHORT).show();
+                                            
+                                            if ("id-photos".equals(targetBucket) && targetTv.getId() == R.id.tvUploadIdText) {
+                                                targetTv.setText("Extracting ID details...");
+                                                GeminiApiClient.extractIdDetails(finalFileBytes, finalMime, new GeminiApiClient.ChatCallback() {
+                                                    @Override
+                                                    public void onSuccess(String idNumber) {
+                                                        runOnUiThread(() -> {
+                                                            targetTv.setText("✓ ID Validated");
+                                                            EditText etIdNum = findViewById(R.id.etIdNum);
+                                                            if (etIdNum != null && idNumber != null && !idNumber.isEmpty()) {
+                                                                etIdNum.setText(idNumber);
+                                                            }
+                                                        });
+                                                    }
+                                                    @Override
+                                                    public void onError(String e) {
+                                                        runOnUiThread(() -> targetTv.setText("✓ ID Uploaded (Extraction failed)"));
+                                                    }
+                                                });
+                                            }
                                         });
                                     }
 
@@ -524,13 +547,7 @@ public class PreviewActivity extends AppCompatActivity {
             CardView cardUploadId = findViewById(R.id.cardUploadId);
             TextView tvUploadIdText = findViewById(R.id.tvUploadIdText);
             if (cardUploadId != null && tvUploadIdText != null) {
-                cardUploadId.setOnClickListener(v -> {
-                    currentUploadTextView = tvUploadIdText;
-                    currentUploadBucket = "id-photos";
-                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                    intent.setType("image/*");
-                    filePickerLauncher.launch(intent);
-                });
+                cardUploadId.setOnClickListener(v -> launchSelfieCamera(tvUploadIdText, null, "id-photos"));
             }
         }
 
@@ -706,7 +723,7 @@ public class PreviewActivity extends AppCompatActivity {
                     String reportDesc = details + "\n\nLocation: " + locAddress
                             + (locationPinned ? String.format(Locale.US, "\nMap pin: %.6f, %.6f", selectedLat, selectedLng) : "");
                     
-                    ReportAssistant.assessSeverity("Complaint", cat, reportDesc, priority -> {
+                    ReportAssistant.assessSeverity("Complaint", cat, reportDesc, locationPinned ? (selectedLat + "," + selectedLng) : "No location", priority -> {
                         SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Complaint", cat, reportDesc, priority,
                                 firstRemoteUrl(attachments),
                                 locationPinned ? Double.valueOf(selectedLat) : null,
@@ -774,8 +791,9 @@ public class PreviewActivity extends AppCompatActivity {
                     }
 
                     String pinnedLoc = locationPinned ? selectedLocationAddress.replace("📍 ", "") : "";
-                    String finalLoc = (!loc.isEmpty() ? loc + (pinnedLoc.isEmpty() ? "" : " (" + pinnedLoc + ")") : pinnedLoc).trim();
-                    if (finalLoc.isEmpty()) finalLoc = "Barangay Area";
+                    String finalLocTemp = (!loc.isEmpty() ? loc + (pinnedLoc.isEmpty() ? "" : " (" + pinnedLoc + ")") : pinnedLoc).trim();
+                    if (finalLocTemp.isEmpty()) finalLocTemp = "Barangay Area";
+                    final String finalLoc = finalLocTemp;
 
                     String reqId = "DIS-" + (int)(Math.random() * 9000 + 1000);
                     String detailsText = det.isEmpty() ? "Emergency assistance requested" : det;
@@ -794,7 +812,7 @@ public class PreviewActivity extends AppCompatActivity {
                     String disasterDesc = detailsText + "\n\nLocation: " + finalLoc
                             + (locationPinned ? String.format(Locale.US, "\nMap pin: %.6f, %.6f", selectedLat, selectedLng) : "");
                     
-                    ReportAssistant.assessSeverity("Incident", disasterType, disasterDesc, priority -> {
+                    ReportAssistant.assessSeverity("Incident", disasterType, disasterDesc, locationPinned ? (selectedLat + "," + selectedLng) : "No location", priority -> {
                         SupabaseClient.submitReportToSupabase(userId, selectedBarangayCode, "Incident", disasterType, disasterDesc, priority,
                                 firstRemoteUrl(attachments),
                                 locationPinned ? Double.valueOf(selectedLat) : null,
@@ -1090,6 +1108,13 @@ public class PreviewActivity extends AppCompatActivity {
             CardView btnCreateAccount = findViewById(R.id.btnCreateAccount);
             EditText etFirstName = findViewById(R.id.etFirstName);
             EditText etLastName = findViewById(R.id.etLastName);
+            EditText etMiddleName = findViewById(R.id.etMiddleName);
+            EditText etSuffix = findViewById(R.id.etSuffix);
+            NameFormat.attach(etFirstName);
+            NameFormat.attach(etLastName);
+            NameFormat.attach(etMiddleName);
+            NameFormat.attach(etSuffix);
+            
             EditText etMobileNumber = findViewById(R.id.etMobileNumber);
             EditText etEmail = findViewById(R.id.etEmail);
             EditText etSignUpPassword = findViewById(R.id.etSignUpPassword);
@@ -1130,8 +1155,6 @@ public class PreviewActivity extends AppCompatActivity {
                     String phone = etMobileNumber != null ? etMobileNumber.getText().toString().trim() : "";
 
                     // Additional fields
-                    EditText etMiddleName = findViewById(R.id.etMiddleName);
-                    EditText etSuffix = findViewById(R.id.etSuffix);
                     EditText etFormDOB = findViewById(R.id.etFormDOB);
                     Spinner spinnerGender = findViewById(R.id.spinnerGender);
                     Spinner spinnerCivilStatus = findViewById(R.id.spinnerCivilStatus);
@@ -1464,8 +1487,32 @@ public class PreviewActivity extends AppCompatActivity {
                         chatAdapter.notifyItemInserted(thinkingIndex);
                         rvChatMessages.scrollToPosition(thinkingIndex);
 
+                        // Build context
+                        StringBuilder extraContext = new StringBuilder();
+                        try {
+                            extraContext.append("Announcements/Events:\n");
+                            for (int i = 0; i < Math.min(5, allAnnouncements.size()); i++) {
+                                JSONObject a = allAnnouncements.get(i);
+                                extraContext.append("- ").append(a.optString("title")).append(" (").append(a.optString("category")).append(")\n");
+                            }
+                            SharedPreferences myPrefs = getSharedPreferences("BarangayPrefs", MODE_PRIVATE);
+                            String contactsJson = myPrefs.getString("CACHED_EMERGENCY_CONTACTS", "[]");
+                            org.json.JSONArray contactsArr = new org.json.JSONArray(contactsJson);
+                            extraContext.append("Emergency Contacts:\n");
+                            for (int i = 0; i < Math.min(5, contactsArr.length()); i++) {
+                                JSONObject c = contactsArr.getJSONObject(i);
+                                extraContext.append("- ").append(c.optString("name")).append(": ").append(c.optString("num")).append("\n");
+                            }
+                            java.util.List<JSONObject> inbox = HistorySync.readInbox(PreviewActivity.this);
+                            extraContext.append("User's Requests/Updates:\n");
+                            for (int i = 0; i < Math.min(3, inbox.size()); i++) {
+                                JSONObject r = inbox.get(i);
+                                extraContext.append("- ").append(r.optString("title")).append(": ").append(r.optString("message")).append("\n");
+                            }
+                        } catch (Exception e) {}
+
                         // 3. Call Gemini AI Backend!
-                        GeminiApiClient.sendMessage(userText, new GeminiApiClient.ChatCallback() {
+                        GeminiApiClient.sendMessage(userText, extraContext.toString(), new GeminiApiClient.ChatCallback() {
                             @Override
                             public void onSuccess(String responseText) {
                                 runOnUiThread(() -> {
@@ -1625,6 +1672,11 @@ public class PreviewActivity extends AppCompatActivity {
                             if (tvTitle != null) tvTitle.setText(title);
                             if (tvDate != null) tvDate.setText("Posted " + date);
                             if (colorStrip != null) colorStrip.setBackgroundColor(Color.parseColor(colorHex));
+                            
+                            ImageView ivIcon = holder.itemView.findViewById(R.id.ivAnnouncementIcon);
+                            if (ivIcon != null) {
+                                ivIcon.setColorFilter(Color.parseColor(colorHex));
+                            }
                             
                             holder.itemView.setOnClickListener(v -> showAnnouncementDetailsModal(item));
                         } catch (Exception e) {
@@ -2046,6 +2098,26 @@ public class PreviewActivity extends AppCompatActivity {
                         layoutEmptyState.setVisibility(View.GONE);
                     }
                 };
+
+                Spinner spinnerSortHistory = findViewById(R.id.spinnerSortHistory);
+                if (spinnerSortHistory != null) {
+                    HintAdapter.attach(spinnerSortHistory, "Sort by", new String[]{"Newest first", "Oldest first"});
+                    spinnerSortHistory.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                        @Override public void onItemSelected(android.widget.AdapterView<?> p, View v, int pos, long id) {
+                            String sel = HintAdapter.getValue(spinnerSortHistory);
+                            if (sel.equals("Oldest first")) {
+                                Collections.reverse(filteredRequests);
+                            } else {
+                                // Default newest first
+                                Collections.sort(filteredRequests, (a, b) -> {
+                                    return Long.compare(b.optLong("timestamp", 0), a.optLong("timestamp", 0));
+                                });
+                            }
+                            historyAdapter.notifyDataSetChanged();
+                        }
+                        @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
+                    });
+                }
 
                 updateUI.run();
 
@@ -2513,9 +2585,11 @@ public class PreviewActivity extends AppCompatActivity {
         String remarks = req.optString("admin_remarks", "");
         StringBuilder upd = new StringBuilder();
         switch (statusKey) {
+            case "waiting_for_confirmation": upd.append("Waiting for barangay confirmation."); break;
             case "approved":         upd.append("Approved by the barangay."); break;
             case "in_progress":      upd.append("The barangay is working on this."); break;
             case "ready_for_pickup": upd.append("Ready for pickup at the barangay hall."); break;
+            case "complete":         upd.append("Completed by the barangay."); break;
             case "resolved":         upd.append("Resolved by the barangay."); break;
             case "rejected":         upd.append("Not approved by the barangay."); break;
             case "cancelled":        upd.append("This request was cancelled."); break;
@@ -2884,12 +2958,12 @@ public class PreviewActivity extends AppCompatActivity {
     private void addImageViewToContainer(String url, LinearLayout container, float d) {
         ImageView iv = new ImageView(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (int)(200 * d));
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, (int)(8 * d), 0, (int)(16 * d));
         iv.setLayoutParams(lp);
-        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        iv.setAdjustViewBounds(true);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         iv.setBackgroundColor(Color.parseColor("#E6E8E6"));
-        iv.setOnClickListener(v -> openAttachment(url));
         container.addView(iv);
         loadImageInto(iv, url);
     }
@@ -3679,9 +3753,12 @@ public class PreviewActivity extends AppCompatActivity {
                 if (!time.isEmpty()) desc.append(" · ").append(time);
                 ((TextView) item.findViewById(R.id.tvNotificationDesc)).setText(desc.toString());
 
-                View icon = item.findViewById(R.id.iconImage);
+                ImageView icon = item.findViewById(R.id.iconImage);
                 CardView iconBox = item.findViewById(R.id.iconContainer);
-                if (icon != null) icon.setBackgroundColor(Color.parseColor(announcement ? "#DBA03B" : "#247D76"));
+                if (icon != null) {
+                    icon.setImageResource(announcement ? R.drawable.ic_speaker : R.drawable.ic_document);
+                    icon.setColorFilter(Color.parseColor(announcement ? "#DBA03B" : "#247D76"));
+                }
                 if (iconBox != null) iconBox.setCardBackgroundColor(Color.parseColor(announcement ? "#FDF1DA" : "#DDF0EC"));
                 View unread = item.findViewById(R.id.unreadDot);
                 if (unread != null) unread.setVisibility(n.optBoolean("read", false) ? View.INVISIBLE : View.VISIBLE);

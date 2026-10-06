@@ -124,6 +124,19 @@
         </HorizontalScrollView>
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="24dp"
+        android:paddingBottom="10dp"
+        android:gravity="end">
+        <Spinner
+            android:id="@+id/spinnerSortHistory"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:backgroundTint="#2A3532"/>
+    </LinearLayout>
+
     <!-- Dynamic Content Area -->
     <FrameLayout
         android:layout_width="match_parent"

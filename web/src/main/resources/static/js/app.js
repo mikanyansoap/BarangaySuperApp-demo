@@ -64,7 +64,7 @@ function renderMarkdown(md) {
     out += formatMarkdownText(text.slice(last, m.index));
     const url = safeUrl(m[1]);
     out += url
-      ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img class="md-img" src="${esc(url)}" alt="Announcement image" loading="lazy"></a>`
+      ? `<img class="md-img" src="${esc(url)}" alt="Announcement image" loading="lazy" style="cursor:zoom-in" onclick="zoomImage(this.src)">`
       : '';
     last = m.index + m[0].length;
   }
@@ -76,9 +76,11 @@ function statusLabel(status) {
   const s = String(status || 'pending').toLowerCase();
   return ({
     pending: 'Pending',
+    waiting_for_confirmation: 'Waiting for confirmation',
     approved: 'Approved',
     in_progress: 'In progress',
     ready_for_pickup: 'Ready for pickup',
+    complete: 'Complete',
     resolved: 'Resolved',
     rejected: 'Rejected',
     cancelled: 'Cancelled'
@@ -317,7 +319,7 @@ function shell(mainHtml, active) {
     ['announcements', 'megaphone', 'Announcements'],
     ['emergency', 'phone', 'Emergency contacts']
   ];
-  navItems.push(['users', 'user', 'Users & officials']);
+  navItems.push(['users', 'user', 'Residents & officials']);
   if (user.isSuperAdmin) {
     navItems.push(['barangays', 'building', 'Barangays']);
   }
@@ -647,10 +649,29 @@ async function renderDashboard() {
             <div class="li"><span class="sw" style="background:#5C8A72;"></span>Resolved (${resolved})</div>
           </div>
         </div>
+        ${!user.isSuperAdmin ? `<div id="ai-summary-box" style="margin-top:20px; padding:12px; background:#f8fafc; border-radius:8px; font-size:12px; color:#334155; line-height:1.5;">✨ Generating AI Summary...</div>` : ''}
       </div>
     </div>
   `;
   stage.innerHTML = shell(main, 'dashboard');
+
+  if (!user.isSuperAdmin) {
+    const summaryBox = document.getElementById('ai-summary-box');
+    if (summaryBox) {
+      try {
+        const textData = \`Reports past 7 days: \${JSON.stringify(trendPoints)}\`;
+        const res = await fetch('/api/admin/ai-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataText: textData })
+        });
+        const d = await res.json();
+        summaryBox.innerHTML = \`<b>✨ AI Summary:</b> <br>\${esc(d.summary)}\`;
+      } catch (err) {
+        summaryBox.innerHTML = \`<span style="color:red">Failed to load AI summary.</span>\`;
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -765,7 +786,7 @@ function openApprovalModal(record) {
 // ---------------------------------------------------------------------
 // DOCUMENTS & IDs (public.requests)
 // ---------------------------------------------------------------------
-const DOC_STATUSES = ['pending', 'approved', 'in_progress', 'ready_for_pickup', 'resolved', 'rejected'];
+const DOC_STATUSES = ['waiting_for_confirmation', 'in_progress', 'ready_for_pickup', 'complete', 'cancelled', 'rejected'];
 
 async function renderDocuments() {
   const user = getActiveUser();
@@ -774,39 +795,7 @@ async function renderDocuments() {
   docs = await load('document requests', () => DataService.getDocuments(user.psgcCode), []);
   const brgyLabels = user.psgcCode ? {} : await DataService.getBarangayLabels(docs.map(d => d.psgc_code));
 
-  const trs = docs.map(d => {
-    const rawStatus = String(d.status || 'pending').toLowerCase();
-    const id = esc(d.id);
-    const options = [...new Set([...DOC_STATUSES, rawStatus])].map(s =>
-      `<option value="${esc(s)}" ${rawStatus === s ? 'selected' : ''}>${esc(statusLabel(s))}</option>`
-    ).join('');
-
-    return `
-      <tr data-doc-row="${id}">
-        <td>
-          <div class="name-cell">
-            <div class="ic" style="background:var(--gold-100);color:var(--gold-600);">${ic('doc')}</div>
-            <div>
-              <div class="t">${esc(d.name)}</div>
-              <div class="s">Requested: ${esc(d.type)}${user.psgcCode ? '' : ` · ${esc(brgyLabels[d.psgc_code] || d.psgc_code || '')}`}</div>
-            </div>
-          </div>
-        </td>
-        <td>
-          <select class="field doc-status-select" data-doc-id="${id}" style="width: auto; padding: 4px 8px; font-size: 12px; height: 32px;" ${rawStatus === 'cancelled' ? 'disabled' : ''}>
-            ${options}
-          </select>
-        </td>
-        <td>
-          <input type="date" class="field doc-date-picker" data-doc-id="${id}" value="${esc(d.pickup)}" style="width: 145px; padding: 4px 8px; font-size: 12px; height: 32px;">
-        </td>
-        <td>
-          <span class="save-indicator text-xs" data-indicator-id="${id}" style="color: var(--teal-800); font-size: 11px;">${rawStatus === 'cancelled' ? 'Cancelled by resident' : 'Saved'}</span>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
+  let currentDocTab = 'active';
   const main = `
     <div class="main-head">
       <div>
@@ -814,25 +803,99 @@ async function renderDocuments() {
         <p>Manage resident barangay clearances, certifications, and permit endorsements.</p>
       </div>
     </div>
+    <div class="tabs" style="margin-bottom:12px; display:flex; gap:16px;">
+      <div id="tab-active" class="tab active" style="cursor:pointer; font-weight:600; padding:4px 0; border-bottom:2px solid #0f766e; color:#0f766e;">Active</div>
+      <div id="tab-archived" class="tab" style="cursor:pointer; font-weight:500; padding:4px 0; border-bottom:2px solid transparent; color:var(--muted);">Archived (Resolved/Cancelled)</div>
+    </div>
     <table class="table">
       <thead><tr><th>Resident &amp; Document</th><th>Status</th><th>Pickup Date</th><th></th></tr></thead>
-      <tbody>${trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No document requests found.</td></tr>'}</tbody>
+      <tbody id="docs-body"></tbody>
     </table>
   `;
   stage.innerHTML = shell(main, 'documents');
 
+  const renderRows = () => {
+    const isArchived = currentDocTab === 'archived';
+    const list = docs.filter(d => {
+      const stat = String(d.status || 'waiting_for_confirmation').toLowerCase();
+      const arch = stat === 'complete' || stat === 'resolved' || stat === 'cancelled' || stat === 'rejected';
+      return isArchived ? arch : !arch;
+    });
+
+    const trs = list.map(d => {
+      const rawStatus = String(d.status || 'waiting_for_confirmation').toLowerCase();
+      const id = esc(d.id);
+      const options = [...new Set([...DOC_STATUSES, rawStatus])].map(s =>
+        `<option value="${esc(s)}" ${rawStatus === s ? 'selected' : ''}>${esc(statusLabel(s))}</option>`
+      ).join('');
+
+      return `
+        <tr data-doc-row="${id}">
+          <td style="vertical-align: top;">
+            <div class="name-cell" style="align-items: flex-start;">
+              <div class="ic" style="background:var(--gold-100);color:var(--gold-600); margin-top: 4px;">${ic('doc')}</div>
+              <div style="flex:1;">
+                <div class="t">${esc(d.name)}</div>
+                <div class="s">Requested: ${esc(d.type)}${user.psgcCode ? '' : ` · ${esc(brgyLabels[d.psgc_code] || d.psgc_code || '')}`}</div>
+                <div style="font-size: 11.5px; color: var(--charcoal); margin-top: 4px;"><b>Purpose:</b> ${esc(d.purpose || 'None specified')}</div>
+                <div style="font-size: 11.5px; color: var(--charcoal); margin-top: 2px;"><b>Contact:</b> ${esc(d.contact || 'No contact info available')}</div>
+                <div style="margin-top: 8px;">
+                  <input type="text" class="field doc-remarks-input" data-doc-id="${id}" value="${esc(d.remarks || '')}" placeholder="Add remarks / notifications to resident..." style="font-size: 11.5px; padding: 4px 8px; width: 100%;" ${rawStatus === 'cancelled' ? 'disabled' : ''}>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td style="vertical-align: top; padding-top: 16px;">
+            <select class="field doc-status-select" data-doc-id="${id}" style="width: auto; padding: 4px 8px; font-size: 12px; height: 32px;" ${rawStatus === 'cancelled' ? 'disabled' : ''}>
+              ${options}
+            </select>
+          </td>
+          <td style="vertical-align: top; padding-top: 16px;">
+            <input type="date" class="field doc-date-picker" data-doc-id="${id}" value="${esc(d.pickup)}" style="width: 145px; padding: 4px 8px; font-size: 12px; height: 32px;">
+          </td>
+          <td style="vertical-align: top; padding-top: 16px;">
+            <span class="save-indicator text-xs" data-indicator-id="${id}" style="color: var(--teal-800); font-size: 11px;">${rawStatus === 'cancelled' ? 'Cancelled by resident' : 'Saved'}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    document.getElementById('docs-body').innerHTML = trs || '<tr><td colspan="4" style="color:var(--muted);padding:16px 10px;">No document requests found.</td></tr>';
+    
+    document.querySelectorAll('.doc-status-select').forEach(select => {
+      select.onchange = () => saveRow(select.dataset.docId);
+    });
+    document.querySelectorAll('.doc-date-picker').forEach(input => {
+      input.onchange = () => saveRow(input.dataset.docId);
+    });
+    document.querySelectorAll('.doc-remarks-input').forEach(input => {
+      input.onchange = () => saveRow(input.dataset.docId);
+    });
+  };
+
   const saveRow = async (id) => {
     const select = document.querySelector(`.doc-status-select[data-doc-id="${CSS.escape(id)}"]`);
     const dateInput = document.querySelector(`.doc-date-picker[data-doc-id="${CSS.escape(id)}"]`);
+    const remarksInput = document.querySelector(`.doc-remarks-input[data-doc-id="${CSS.escape(id)}"]`);
     const indicator = document.querySelector(`[data-indicator-id="${CSS.escape(id)}"]`);
     indicator.textContent = 'Saving...';
     indicator.style.color = 'var(--teal-800)';
     try {
       await DataService.updateDocument(id, {
         status: select.value,
-        pickup_date: dateInput.value || null
+        pickup_date: dateInput.value || null,
+        admin_remarks: remarksInput ? remarksInput.value : null
       });
       indicator.textContent = 'Saved';
+      
+      const doc = docs.find(d => d.id === id);
+      if (doc) {
+        doc.status = select.value;
+        if (remarksInput) doc.remarks = remarksInput.value;
+      }
+      if (doc && (doc.status === 'complete' || doc.status === 'resolved' || doc.status === 'cancelled' || doc.status === 'rejected')) {
+        setTimeout(renderRows, 1000); // refresh list to move to archived
+      }
     } catch (err) {
       console.error(err);
       indicator.textContent = err?.message ? `Error: ${err.message}` : 'Error saving';
@@ -840,12 +903,28 @@ async function renderDocuments() {
     }
   };
 
-  document.querySelectorAll('.doc-status-select').forEach(select => {
-    select.onchange = () => saveRow(select.dataset.docId);
-  });
-  document.querySelectorAll('.doc-date-picker').forEach(input => {
-    input.onchange = () => saveRow(input.dataset.docId);
-  });
+  document.getElementById('tab-active').onclick = () => {
+    currentDocTab = 'active';
+    document.getElementById('tab-active').style.borderBottomColor = '#0f766e';
+    document.getElementById('tab-active').style.color = '#0f766e';
+    document.getElementById('tab-active').style.fontWeight = '600';
+    document.getElementById('tab-archived').style.borderBottomColor = 'transparent';
+    document.getElementById('tab-archived').style.color = 'var(--muted)';
+    document.getElementById('tab-archived').style.fontWeight = '500';
+    renderRows();
+  };
+  document.getElementById('tab-archived').onclick = () => {
+    currentDocTab = 'archived';
+    document.getElementById('tab-archived').style.borderBottomColor = '#0f766e';
+    document.getElementById('tab-archived').style.color = '#0f766e';
+    document.getElementById('tab-archived').style.fontWeight = '600';
+    document.getElementById('tab-active').style.borderBottomColor = 'transparent';
+    document.getElementById('tab-active').style.color = 'var(--muted)';
+    document.getElementById('tab-active').style.fontWeight = '500';
+    renderRows();
+  };
+
+  renderRows();
 }
 
 // ---------------------------------------------------------------------
@@ -872,6 +951,10 @@ async function renderQueue() {
       <div class="panel" style="margin-bottom:14px; padding:0; overflow:hidden;">
         <div id="queue-map" style="height:260px; width:100%;"></div>
       </div>` : ''}
+    <div class="tabs" style="margin-bottom:12px; display:flex; gap:16px;">
+      <div id="tab-queue-active" class="tab active" style="cursor:pointer; font-weight:600; padding:4px 0; border-bottom:2px solid #0f766e; color:#0f766e;">Active</div>
+      <div id="tab-queue-archived" class="tab" style="cursor:pointer; font-weight:500; padding:4px 0; border-bottom:2px solid transparent; color:var(--muted);">Archived (Resolved/Cancelled)</div>
+    </div>
     <div class="filters">
       <select id="queue-cat-filter">
         <option value="">All types</option>
@@ -899,15 +982,21 @@ async function renderQueue() {
   `;
   stage.innerHTML = shell(main, 'queue');
 
-  const renderRows = () => {
+    let currentQueueTab = 'active';
+    const renderRows = () => {
+    const isArchived = currentQueueTab === 'archived';
     const cat = document.getElementById('queue-cat-filter').value;
     const stat = document.getElementById('queue-stat-filter').value;
     const search = document.getElementById('queue-search').value.toLowerCase();
     const sortVal = document.getElementById('queue-sort').value;
 
     const list = reports.filter(q => {
+      const qStat = String(q.status || 'pending').toLowerCase();
+      const arch = qStat === 'resolved' || qStat === 'cancelled';
+      if (isArchived ? !arch : arch) return false;
+
       const matchesCat = !cat || q.category === cat;
-      const matchesStat = !stat || String(q.status || '').toLowerCase() === stat;
+      const matchesStat = !stat || qStat === stat;
       const matchesSearch = !search ||
         String(q.title || '').toLowerCase().includes(search) ||
         String(q.description || '').toLowerCase().includes(search);
@@ -963,8 +1052,28 @@ async function renderQueue() {
   document.getElementById('queue-stat-filter').onchange = renderRows;
   document.getElementById('queue-sort').onchange = renderRows;
   document.getElementById('queue-search').oninput = renderRows;
+  
+  document.getElementById('tab-queue-active').onclick = () => {
+    currentQueueTab = 'active';
+    document.getElementById('tab-queue-active').style.borderBottomColor = '#0f766e';
+    document.getElementById('tab-queue-active').style.color = '#0f766e';
+    document.getElementById('tab-queue-active').style.fontWeight = '600';
+    document.getElementById('tab-queue-archived').style.borderBottomColor = 'transparent';
+    document.getElementById('tab-queue-archived').style.color = 'var(--muted)';
+    document.getElementById('tab-queue-archived').style.fontWeight = '500';
+    renderRows();
+  };
+  document.getElementById('tab-queue-archived').onclick = () => {
+    currentQueueTab = 'archived';
+    document.getElementById('tab-queue-archived').style.borderBottomColor = '#0f766e';
+    document.getElementById('tab-queue-archived').style.color = '#0f766e';
+    document.getElementById('tab-queue-archived').style.fontWeight = '600';
+    document.getElementById('tab-queue-active').style.borderBottomColor = 'transparent';
+    document.getElementById('tab-queue-active').style.color = 'var(--muted)';
+    document.getElementById('tab-queue-active').style.fontWeight = '500';
+    renderRows();
+  };
   renderRows();
-
   // Overview map: every pinned report, click a pin to open it
   if (pinned.length) {
     const map = createMap('queue-map', [pinned[0].c.lat, pinned[0].c.lng], 15);
@@ -1098,6 +1207,39 @@ const ANN_CATEGORIES = ['Advisory', 'Health', 'Event'];
 
 function announcementFormHtml(prefix, ann = {}) {
   const current = ann.category || ann.tag || 'Advisory';
+  const user = getActiveUser();
+  const scopeHtml = user.isSuperAdmin ? `
+    <div class="modal-form-group">
+      <label>Target Audience (Scope)</label>
+      <select class="field" id="${prefix}-scope-type" onchange="document.getElementById('${prefix}-scope-brgy-wrap').style.display = this.value === 'BARANGAY' ? 'block' : 'none'">
+        <option value="" ${!ann.psgc_code ? 'selected' : ''}>Nationwide (All Users)</option>
+        <option value="REGION:Metro Manila (NCR)" ${ann.psgc_code === 'REGION:Metro Manila (NCR)' ? 'selected' : ''}>Region: Metro Manila (NCR)</option>
+        <option value="CITY:City of Makati" ${ann.psgc_code === 'CITY:City of Makati' ? 'selected' : ''}>City: Makati</option>
+        <option value="CITY:City of Manila" ${ann.psgc_code === 'CITY:City of Manila' ? 'selected' : ''}>City: Manila</option>
+        <option value="CITY:City of Taguig" ${ann.psgc_code === 'CITY:City of Taguig' ? 'selected' : ''}>City: Taguig</option>
+        <option value="CITY:Quezon City" ${ann.psgc_code === 'CITY:Quezon City' ? 'selected' : ''}>City: Quezon City</option>
+        <option value="CITY:City of Las Piñas" ${ann.psgc_code === 'CITY:City of Las Piñas' ? 'selected' : ''}>City: Las Piñas</option>
+        <option value="CITY:City of Parañaque" ${ann.psgc_code === 'CITY:City of Parañaque' ? 'selected' : ''}>City: Parañaque</option>
+        <option value="CITY:City of Pasay" ${ann.psgc_code === 'CITY:City of Pasay' ? 'selected' : ''}>City: Pasay</option>
+        <option value="CITY:City of Muntinlupa" ${ann.psgc_code === 'CITY:City of Muntinlupa' ? 'selected' : ''}>City: Muntinlupa</option>
+        <option value="CITY:City of Pasig" ${ann.psgc_code === 'CITY:City of Pasig' ? 'selected' : ''}>City: Pasig</option>
+        <option value="CITY:City of Mandaluyong" ${ann.psgc_code === 'CITY:City of Mandaluyong' ? 'selected' : ''}>City: Mandaluyong</option>
+        <option value="CITY:City of Marikina" ${ann.psgc_code === 'CITY:City of Marikina' ? 'selected' : ''}>City: Marikina</option>
+        <option value="CITY:City of San Juan" ${ann.psgc_code === 'CITY:City of San Juan' ? 'selected' : ''}>City: San Juan</option>
+        <option value="CITY:City of Caloocan" ${ann.psgc_code === 'CITY:City of Caloocan' ? 'selected' : ''}>City: Caloocan</option>
+        <option value="CITY:City of Malabon" ${ann.psgc_code === 'CITY:City of Malabon' ? 'selected' : ''}>City: Malabon</option>
+        <option value="CITY:City of Navotas" ${ann.psgc_code === 'CITY:City of Navotas' ? 'selected' : ''}>City: Navotas</option>
+        <option value="CITY:City of Valenzuela" ${ann.psgc_code === 'CITY:City of Valenzuela' ? 'selected' : ''}>City: Valenzuela</option>
+        <option value="CITY:Pateros" ${ann.psgc_code === 'CITY:Pateros' ? 'selected' : ''}>Municipality: Pateros</option>
+        <option value="BARANGAY" ${ann.psgc_code && /^[0-9]+$/.test(ann.psgc_code) ? 'selected' : ''}>Specific Barangay...</option>
+      </select>
+    </div>
+    <div class="modal-form-group" id="${prefix}-scope-brgy-wrap" style="display:${ann.psgc_code && /^[0-9]+$/.test(ann.psgc_code) ? 'block' : 'none'};">
+      <div id="${prefix}-brgy-current" style="margin-bottom:6px; font-size:13px; font-weight:500;"></div>
+      ${barangaySearchHtml(prefix, 'Search to choose a specific barangay...')}
+    </div>
+  ` : '';
+
   const tools = [
     ['h1', 'Heading', '<b>H1</b>'],
     ['h2', 'Subheading', '<b>H2</b>'],
@@ -1139,6 +1281,7 @@ function announcementFormHtml(prefix, ann = {}) {
         ${ANN_CATEGORIES.map(c => `<option value="${c}" ${current === c ? 'selected' : ''}>${c}</option>`).join('')}
       </select>
     </div>
+    ${scopeHtml}
   `;
 }
 
@@ -1233,15 +1376,42 @@ function setupAnnouncementEditor(prefix, psgcCode) {
   });
   fileInput.onchange = () => { uploadImages(fileInput.files); fileInput.value = ''; };
 
+  const user = getActiveUser();
+  if (user.isSuperAdmin) {
+    wireBarangaySearch(prefix, (b) => {
+      window[`${prefix}ChosenBrgy`] = b.psgc_code;
+      document.getElementById(`${prefix}-brgy-current`).innerHTML = `<b>${esc(b.name)}</b>, ${esc(b.city_municipality)}`;
+    });
+  }
+
   refresh();
 }
 
 function readAnnouncementForm(prefix) {
+  const t = document.getElementById(`${prefix}-title`);
+  const d = document.getElementById(`${prefix}-desc`);
+  const c = document.getElementById(`${prefix}-cat`);
+  const dt = document.getElementById(`${prefix}-date`);
+  if (!t.value.trim() || !d.value.trim()) throw new Error('Please provide a title and description.');
+  
+  const user = getActiveUser();
+  let finalPsgcCode = undefined;
+  if (user.isSuperAdmin) {
+    const scopeType = document.getElementById(`${prefix}-scope-type`).value;
+    if (scopeType === 'BARANGAY') {
+      finalPsgcCode = window[`${prefix}ChosenBrgy`] || null;
+      if (!finalPsgcCode) throw new Error('Please select a specific barangay for the target scope.');
+    } else {
+      finalPsgcCode = scopeType || null;
+    }
+  }
+
   return {
-    title: document.getElementById(`${prefix}-title`).value.trim(),
-    description: document.getElementById(`${prefix}-desc`).value.trim(),
-    eventDate: document.getElementById(`${prefix}-date`).value,
-    category: document.getElementById(`${prefix}-cat`).value
+    title: t.value.trim(),
+    description: d.value.trim(),
+    category: c.value,
+    eventDate: dt.value || null,
+    psgcCode: finalPsgcCode
   };
 }
 
@@ -1249,11 +1419,16 @@ async function renderAnnouncements() {
   const user = getActiveUser();
   let announcements = [];
 
-  announcements = await load('announcements', () => DataService.getAnnouncements(user.psgcCode), []);
-  // nationwide posts (by the super admin) also reach every resident; show them read-only
-  const nationwide = user.psgcCode
+  announcements = await load('announcements', () => DataService.getAnnouncements(user.isSuperAdmin ? 'ALL' : user.psgcCode), []);
+  // nationwide posts (by the super admin) also reach every resident; show them read-only for officials
+  const nationwide = (user.psgcCode && !user.isSuperAdmin)
     ? (await load('nationwide announcements', () => DataService.getAnnouncements(null), [])).filter(a => !a.isArchived)
     : [];
+
+  const isAdminPost = (a) => {
+    const role = (a.profiles?.role || '').toLowerCase();
+    return role === 'db_admin' || role === 'super_admin' || role === 'superadmin' || !a.psgc_code || String(a.psgc_code).startsWith('CITY:') || String(a.psgc_code).startsWith('REGION:');
+  };
 
   const activeList = announcements.filter(a => !a.isArchived);
   const pastList = announcements.filter(a => a.isArchived);
@@ -1273,31 +1448,42 @@ async function renderAnnouncements() {
     }
   });
 
-  const activeItems = activeList.map(a => `
-    <div class="ann-item" style="margin-bottom:12px;">
-      <div class="top"><span class="tag" style="color:var(--teal-800);background:var(--teal-100);">${esc(a.tag)}</span></div>
-      <p class="title" style="margin:6px 0 2px 0;">${esc(a.title)}</p>
-      ${a.description ? `<div class="md-body md-card" style="font-size:12px; color:var(--muted); margin:0 0 6px 0;">${renderMarkdown(a.description)}</div>` : ''}
-      <p class="meta">
-        ${a.event_date ? `Event: ${esc(a.event_date)} · ` : ''}Posted ${esc(a.posted)} ·
-        <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-edit-ann="${esc(a.id)}">Edit</a>
-        <a href="#" style="color:var(--brick);text-decoration:none;font-weight:600;" data-archive-ann="${esc(a.id)}">Archive</a>
-      </p>
-    </div>
-  `).join('');
+  const activeItems = activeList.map(a => {
+    const canEdit = user.isSuperAdmin || !isAdminPost(a);
+    let tagHtml = esc(a.tag || '');
+    if (user.isSuperAdmin && a.psgc_code && a.psgc_code.startsWith('CITY:')) tagHtml += ` · ${a.psgc_code.split(':')[1]}`;
+    else if (user.isSuperAdmin && a.psgc_code && a.psgc_code.startsWith('REGION:')) tagHtml += ` · NCR`;
+    else if (user.isSuperAdmin && !a.psgc_code) tagHtml += ` · Nationwide`;
+    
+    return `
+      <div class="ann-item" style="margin-bottom:12px;">
+        <div class="top"><span class="tag" style="color:var(--teal-800);background:var(--teal-100);">${tagHtml}</span></div>
+        <p class="title" style="margin:6px 0 2px 0;">${esc(a.title)}</p>
+        ${a.description ? `<div class="md-body md-card" style="font-size:12px; color:var(--muted); margin:0 0 6px 0;">${renderMarkdown(a.description)}</div>` : ''}
+        <p class="meta">
+          ${a.event_date ? `Event: ${esc(a.event_date)} · ` : ''}Posted ${esc(a.posted)}
+          ${canEdit ? ` · <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-edit-ann="${esc(a.id)}">Edit</a>` : ''}
+          ${canEdit ? `<a href="#" style="color:var(--brick);text-decoration:none;font-weight:600;" data-archive-ann="${esc(a.id)}">Archive</a>` : ''}
+        </p>
+      </div>
+    `;
+  }).join('');
 
-  const pastItems = pastList.map(a => `
-    <div class="ann-item" style="margin-bottom:10px; opacity:0.85; background:#fbfbfa;">
-      <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${esc(a.tag || 'Archived')}</span></div>
-      <p class="title" style="margin:4px 0 2px 0; font-size:13.5px;">${esc(a.title)}</p>
-      ${a.description ? `<div class="md-body md-card" style="font-size:11.5px; color:var(--muted); margin:0 0 4px 0;">${renderMarkdown(a.description)}</div>` : ''}
-      <p class="meta">
-        ${a.event_date ? `Event: ${esc(a.event_date)} · ` : ''}${esc(a.posted || 'Past')} ·
-        <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-repost-ann="${esc(a.id)}">Repost</a>
-        <a href="#" style="color:var(--charcoal);text-decoration:none;font-weight:600;" data-edit-ann="${esc(a.id)}">Edit</a>
-      </p>
-    </div>
-  `).join('');
+  const pastItems = pastList.map(a => {
+    const canEdit = user.isSuperAdmin || !isAdminPost(a);
+    return `
+      <div class="ann-item" style="margin-bottom:10px; opacity:0.85; background:#fbfbfa;">
+        <div class="top"><span class="tag" style="color:#64748b;background:#f1f5f9;">${esc(a.tag || 'Archived')}</span></div>
+        <p class="title" style="margin:4px 0 2px 0; font-size:13.5px;">${esc(a.title)}</p>
+        ${a.description ? `<div class="md-body md-card" style="font-size:11.5px; color:var(--muted); margin:0 0 4px 0;">${renderMarkdown(a.description)}</div>` : ''}
+        <p class="meta">
+          ${a.event_date ? `Event: ${esc(a.event_date)} · ` : ''}${esc(a.posted || 'Past')}
+          ${canEdit ? ` · <a href="#" style="color:var(--teal-800);text-decoration:none;font-weight:600;margin-right:8px;" data-repost-ann="${esc(a.id)}">Repost</a>` : ''}
+          ${canEdit ? `<a href="#" style="color:var(--charcoal);text-decoration:none;font-weight:600;" data-edit-ann="${esc(a.id)}">Edit</a>` : ''}
+        </p>
+      </div>
+    `;
+  }).join('');
 
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -1307,8 +1493,9 @@ async function renderAnnouncements() {
     const dayNum = i + 1;
     const isToday = isCurrentMonthView && (dayNum === realToday.getDate());
     const hasEvent = eventDays.has(dayNum);
+    const fullDate = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
     return `
-      <div class="d ${isToday ? 'today' : ''}" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 32px;">
+      <div class="d ${isToday ? 'today' : ''}" data-day="${fullDate}" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 32px; ${hasEvent ? 'cursor: pointer;' : ''}">
         <span>${dayNum}</span>
         ${hasEvent ? `<span style="width:5px;height:5px;background-color:${isToday ? '#ffffff' : 'var(--teal-800, #0f766e)'};border-radius:50%;position:absolute;bottom:2px;"></span>` : ''}
       </div>
@@ -1319,9 +1506,9 @@ async function renderAnnouncements() {
     <div class="main-head">
       <div>
         <h3>Announcements &amp; calendar</h3>
-        <p>${user.psgcCode
-          ? `Bulletins published to residents of ${esc(user.barangayName)} on the mobile app.`
-          : 'Nationwide bulletins: shown to residents of <b>every</b> barangay.'}</p>
+        <p>${user.isSuperAdmin 
+          ? 'Manage all announcements across barangays, cities, and regions.' 
+          : `Bulletins published to residents of ${esc(user.barangayName)} on the mobile app.`}</p>
       </div>
       <button class="btn-small" id="btn-new-ann">+ New announcement</button>
     </div>
@@ -1377,6 +1564,29 @@ async function renderAnnouncements() {
     calendarViewDate = new Date(viewYear, viewMonth + 1, 1);
     renderAnnouncements();
   };
+
+  document.querySelectorAll('.d[data-day]').forEach(cell => {
+    cell.onclick = () => {
+      const date = cell.dataset.day;
+      const dayEvents = announcements.filter(a => String(a.event_date) === date);
+      if (!dayEvents.length) return;
+      
+      const eventsHtml = dayEvents.map(a => `
+        <div style="margin-bottom:12px; padding:12px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc;">
+          <span style="font-size:11px; font-weight:600; color:var(--teal-800); text-transform:uppercase;">${esc(a.category)}</span>
+          <p style="margin:4px 0; font-weight:600; color:#0f172a;">${esc(a.title)}</p>
+          ${a.description ? `<div class="md-body md-card" style="font-size:12px; color:var(--muted); margin:0 0 6px 0;">${renderMarkdown(a.description)}</div>` : ''}
+        </div>
+      `).join('');
+      
+      openCustomModal({
+        title: `Events on ${date}`,
+        contentHtml: eventsHtml,
+        confirmText: 'Close',
+        hideCancel: true
+      });
+    };
+  });
 
   document.getElementById('btn-new-ann').onclick = () => {
     openCustomModal({
@@ -1452,6 +1662,44 @@ async function renderAnnouncements() {
 // ---------------------------------------------------------------------
 function contactFormHtml(prefix, contact = {}) {
   const current = contact.category || 'Barangay';
+  const user = getActiveUser();
+  let scopeHtml = '';
+  
+  if (user.isSuperAdmin) {
+    const isNationwide = !contact.psgc_code;
+    const isCity = contact.psgc_code && contact.psgc_code.startsWith('CITY:');
+    const isRegion = contact.psgc_code && contact.psgc_code.startsWith('REGION:');
+    const isBrgy = contact.psgc_code && !isCity && !isRegion;
+    const scopeType = isNationwide ? '' : (isCity ? 'CITY' : (isRegion ? 'REGION' : 'BARANGAY'));
+    
+    scopeHtml = `
+      <div class="modal-form-group">
+        <label>Target Scope</label>
+        <select class="field" id="${prefix}-scope-type" style="margin-bottom:8px;">
+          <option value="">Nationwide (All users)</option>
+          <option value="REGION" ${scopeType === 'REGION' ? 'selected' : ''}>Region-wide</option>
+          <option value="CITY" ${scopeType === 'CITY' ? 'selected' : ''}>City-wide</option>
+          <option value="BARANGAY" ${scopeType === 'BARANGAY' ? 'selected' : ''}>Specific Barangay</option>
+        </select>
+        <div id="${prefix}-scope-region" style="display:${scopeType === 'REGION' ? 'block' : 'none'};">
+          <select class="field" id="${prefix}-region-val">
+            ${['NCR', 'CAR', 'Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'Region XIII', 'BARMM'].map(r => 
+              `<option value="REGION:${r}" ${contact.psgc_code === `REGION:${r}` ? 'selected' : ''}>${r}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div id="${prefix}-scope-city" style="display:${scopeType === 'CITY' ? 'block' : 'none'};">
+          <input type="text" class="field" id="${prefix}-city-val" placeholder="e.g. Makati" value="${isCity ? esc(contact.psgc_code.split(':')[1]) : ''}">
+        </div>
+        <div id="${prefix}-scope-brgy" style="display:${scopeType === 'BARANGAY' ? 'block' : 'none'}; padding:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:6px;">Search and select the target barangay:</p>
+          ${barangaySearchHtml(`${prefix}-brgy`)}
+          <p style="font-size:12px;margin-top:6px;">Current: <span id="${prefix}-brgy-current" style="color:var(--charcoal);">${isBrgy ? '<i>Loading...</i>' : 'None'}</span></p>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="modal-form-group">
       <label>Agency / Contact Name</label>
@@ -1467,6 +1715,7 @@ function contactFormHtml(prefix, contact = {}) {
       <label>Contact Number</label>
       <input class="field" id="${prefix}-num" value="${esc(contact.num || '')}" required placeholder="e.g. 911 or 0917-XXX-XXXX">
     </div>
+    ${scopeHtml}
   `;
 }
 
@@ -1523,17 +1772,60 @@ async function renderEmergency() {
   `;
   stage.innerHTML = shell(main, 'emergency');
 
+  const setupEmergencyScope = (prefix, contact) => {
+    if (!user.isSuperAdmin) return;
+    const sel = document.getElementById(`${prefix}-scope-type`);
+    const reg = document.getElementById(`${prefix}-scope-region`);
+    const cty = document.getElementById(`${prefix}-scope-city`);
+    const bgy = document.getElementById(`${prefix}-scope-brgy`);
+    
+    sel.onchange = (e) => {
+      reg.style.display = e.target.value === 'REGION' ? 'block' : 'none';
+      cty.style.display = e.target.value === 'CITY' ? 'block' : 'none';
+      bgy.style.display = e.target.value === 'BARANGAY' ? 'block' : 'none';
+    };
+
+    wireBarangaySearch(`${prefix}-brgy`, (b) => {
+      window[`${prefix}ChosenBrgy`] = b.psgc_code;
+      document.getElementById(`${prefix}-brgy-current`).innerHTML = `<b>${esc(b.name)}</b>, ${esc(b.city_municipality)}`;
+    });
+    
+    if (contact?.psgc_code && !contact.psgc_code.startsWith('CITY:') && !contact.psgc_code.startsWith('REGION:')) {
+      window[`${prefix}ChosenBrgy`] = contact.psgc_code;
+      DataService.getBarangayLabels([contact.psgc_code]).then(lbls => {
+        const c = document.getElementById(`${prefix}-brgy-current`);
+        if (c) c.innerHTML = `<b>${esc(lbls[contact.psgc_code] || contact.psgc_code)}</b>`;
+      });
+    } else {
+      window[`${prefix}ChosenBrgy`] = null;
+    }
+  };
+
+  const getEmergencyScope = (prefix) => {
+    if (!user.isSuperAdmin) return user.psgcCode;
+    const type = document.getElementById(`${prefix}-scope-type`).value;
+    if (type === 'REGION') return document.getElementById(`${prefix}-region-val`).value;
+    if (type === 'CITY') return `CITY:${document.getElementById(`${prefix}-city-val`).value.trim()}`;
+    if (type === 'BARANGAY') return window[`${prefix}ChosenBrgy`] || null;
+    return null;
+  };
+
   document.getElementById('btn-add-em').onclick = () => {
     openCustomModal({
       title: 'Add emergency contact',
       contentHtml: contactFormHtml('em'),
       confirmText: 'Save Contact',
+      onOpen: () => setupEmergencyScope('em'),
       onConfirm: async () => {
+        let finalPsgcCode = getEmergencyScope('em');
+        if (user.isSuperAdmin && document.getElementById('em-scope-type').value === 'BARANGAY' && !finalPsgcCode) {
+          throw new Error('Please select a specific barangay for the target scope.');
+        }
         await DataService.createEmergencyContact({
           name: document.getElementById('em-name').value.trim(),
           category: document.getElementById('em-cat').value,
           num: document.getElementById('em-num').value.trim(),
-          psgcCode: user.psgcCode
+          psgcCode: finalPsgcCode
         });
         closeModal();
         renderEmergency();
@@ -1549,11 +1841,17 @@ async function renderEmergency() {
         title: 'Edit emergency contact',
         contentHtml: contactFormHtml('em-edit', contact),
         confirmText: 'Update Contact',
+        onOpen: () => setupEmergencyScope('em-edit', contact),
         onConfirm: async () => {
+          let finalPsgcCode = getEmergencyScope('em-edit');
+          if (user.isSuperAdmin && document.getElementById('em-edit-scope-type').value === 'BARANGAY' && !finalPsgcCode) {
+            throw new Error('Please select a specific barangay for the target scope.');
+          }
           await DataService.updateEmergencyContact(contact.id, {
             name: document.getElementById('em-edit-name').value.trim(),
             category: document.getElementById('em-edit-cat').value,
-            num: document.getElementById('em-edit-num').value.trim()
+            num: document.getElementById('em-edit-num').value.trim(),
+            psgcCode: finalPsgcCode
           });
           closeModal();
           renderEmergency();
@@ -1817,11 +2115,20 @@ function openUserEditor(person, currentLabel, readOnly = false) {
     onConfirm: async () => {
       if (readOnly) { closeModal(); return; }
       const newRole = isMe ? person.role : document.getElementById('ue-role').value;
+      const newStatus = document.getElementById('ue-status').value;
       if (newRole !== 'db_admin' && !chosen) throw new Error('Residents and officials need a barangay.');
+      
+      let reason = null;
+      if (newStatus === 'rejected') {
+        reason = prompt('Please enter the reason for rejection:');
+        if (reason === null) return; // User cancelled
+      }
+
       await DataService.updateProfileAdmin(person.id, {
         role: newRole,
-        account_status: document.getElementById('ue-status').value,
-        psgc_code: chosen ? chosen.psgc_code : null
+        account_status: newStatus,
+        psgc_code: chosen ? chosen.psgc_code : null,
+        rejection_reason: reason
       });
       closeModal();
       renderUsers();
@@ -1927,3 +2234,28 @@ async function renderBarangays() {
     showScreen('login');
   }
 })();
+
+// Image zooming functionality
+window.zoomImage = function(src) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;opacity:0;transition:opacity 0.2s;';
+  
+  const img = document.createElement('img');
+  img.src = src;
+  img.style.cssText = 'max-width:90%;max-height:90%;object-fit:contain;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);transform:scale(0.95);transition:transform 0.2s;';
+  
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+  
+  // Trigger animation
+  requestAnimationFrame(() => {
+    overlay.style.opacity = '1';
+    img.style.transform = 'scale(1)';
+  });
+  
+  overlay.onclick = () => {
+    overlay.style.opacity = '0';
+    img.style.transform = 'scale(0.95)';
+    setTimeout(() => overlay.remove(), 200);
+  };
+};

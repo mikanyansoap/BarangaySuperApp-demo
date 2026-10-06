@@ -43,8 +43,8 @@ function scoped(query, psgcCode) {
   return psgcCode ? query.eq('psgc_code', psgcCode) : query;
 }
 
-/** Announcements / contacts: a barangay's own rows, or (psgcCode null) the nationwide rows. */
 function ownOrNationwide(query, psgcCode) {
+  if (psgcCode === 'ALL') return query;
   return psgcCode ? query.eq('psgc_code', psgcCode) : query.is('psgc_code', null);
 }
 
@@ -215,20 +215,28 @@ export const DataService = {
   // ---------------- DOCUMENT / ID REQUESTS ----------------
 
   async getDocuments(psgcCode) {
-    const { data, error } = await scoped(supabase
-      .from('requests')
-      .select('*')
-      .order('created_at', { ascending: false }), psgcCode);
-    if (error) throw error;
+    let q = supabase.from('requests').select('*, profiles(email, mobile_number)').order('created_at', { ascending: false });
+    let { data, error } = await scoped(q, psgcCode);
+    if (error) {
+      // Fallback if profiles relation doesn't exist
+      const fallback = await scoped(supabase.from('requests').select('*').order('created_at', { ascending: false }), psgcCode);
+      data = fallback.data;
+    }
     return (data || []).map(d => {
       const applicant = /Applicant:\s*(.+)/i.exec(d.description || '');
       const docType = /Document Type:\s*(.+)/i.exec(d.description || '');
+      const purpose = /Purpose:\s*(.+)/i.exec(d.description || '');
+      const phone = d.profiles?.mobile_number || '';
+      const email = d.profiles?.email || '';
       return {
         ...d,
         name: d.requester_name || (applicant ? applicant[1].trim() : '') || 'Resident',
         type: d.document_type || (docType ? docType[1].trim() : '') ||
               (d.title || '').replace(/^Document Request:\s*/i, '') || 'Barangay Document',
-        pickup: d.pickup_date || ''
+        purpose: purpose ? purpose[1].trim() : (d.description || ''),
+        contact: [phone, email].filter(Boolean).join(' · '),
+        pickup: d.pickup_date || '',
+        remarks: d.admin_remarks || ''
       };
     });
   },
@@ -248,7 +256,7 @@ export const DataService = {
   async getAnnouncements(psgcCode) {
     const { data, error } = await ownOrNationwide(supabase
       .from('announcements')
-      .select('*')
+      .select('*, profiles!author_id(role)')
       .order('created_at', { ascending: false }), psgcCode);
     if (error) throw error;
 
@@ -439,8 +447,9 @@ export const DataService = {
     return data || [];
   },
 
-  async updateProfileAdmin(id, { role, account_status, psgc_code }) {
+  async updateProfileAdmin(id, { role, account_status, psgc_code, rejection_reason }) {
     const updates = { role, account_status, psgc_code: psgc_code || null };
+    if (rejection_reason !== undefined) updates.rejection_reason = rejection_reason;
     const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select('id');
     if (error) throw error;
     return ensureChanged(data, 'update this user');

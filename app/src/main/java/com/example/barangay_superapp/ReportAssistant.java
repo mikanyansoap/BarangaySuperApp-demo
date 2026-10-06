@@ -19,7 +19,7 @@ public final class ReportAssistant {
             "Garbage Collection Issue", "Streetlight Repair", "Others"};
 
     public static final String[] DISASTER_TYPES = {
-            "Flooding", "Fire Emergency", "Landslide", "Typhoon / Strong Winds", "Medical Emergency", "Others"};
+            "Flood", "Earthquake", "Landslide", "Others"};
 
     public static final String[] QUESTIONS = {
             "Ano ang nangyari? Ikwento mo nang maikli. (What happened?)",
@@ -83,7 +83,7 @@ public final class ReportAssistant {
               .append("Write the description in the same language the resident used (English, Filipino or Taglish), 3 to 6 sentences.\n")
               .append("Return JSON only with keys: type (\"report\" or \"disaster\"), category, title (max 60 chars), description, location.\n")
               .append("If type is \"report\", category must be exactly one of: ").append(String.join(" | ", REPORT_CATEGORIES)).append("\n")
-              .append("If type is \"disaster\" (fire, flood, landslide, typhoon, medical emergency or anything life-threatening), ")
+              .append("If type is \"disaster\" (flood, earthquake, landslide), ")
               .append("category must be exactly one of: ").append(String.join(" | ", DISASTER_TYPES)).append("\n\n")
               .append("What happened: ").append(safe(answers, 0)).append("\n")
               .append("Where: ").append(safe(answers, 1)).append("\n")
@@ -146,17 +146,18 @@ public final class ReportAssistant {
         void onSeverity(String priority);
     }
 
-    public static void assessSeverity(String type, String category, String description, SeverityCallback callback) {
+    public static void assessSeverity(String type, String category, String description, String location, SeverityCallback callback) {
         if (!GeminiApiClient.isConfigured()) {
             callback.onSeverity(type.equalsIgnoreCase("Incident") ? "high" : "medium");
             return;
         }
-        String prompt = "Rate the emergency severity of this barangay report as exactly 'low', 'medium', or 'high'. Reply with ONLY ONE WORD.\n" +
-            "Type: " + type + "\nCategory: " + category + "\nDetails: " + description;
+        String prompt = "Rate the emergency severity of this barangay report as exactly 'low', 'medium', 'high', or 'irrelevant' (if the location is far away or completely unrelated to the barangay concern). Reply with ONLY ONE WORD.\n" +
+            "Type: " + type + "\nCategory: " + category + "\nLocation: " + location + "\nDetails: " + description;
         GeminiApiClient.generate(prompt, false, new GeminiApiClient.ChatCallback() {
             @Override public void onSuccess(String r) {
                 String s = r.trim().toLowerCase(Locale.ROOT);
-                if (s.contains("high")) callback.onSeverity("high");
+                if (s.contains("irrelevant")) callback.onSeverity("irrelevant");
+                else if (s.contains("high")) callback.onSeverity("high");
                 else if (s.contains("low")) callback.onSeverity("low");
                 else callback.onSeverity("medium");
             }
@@ -173,14 +174,12 @@ public final class ReportAssistant {
         String all = (what + " " + other + " " + hurt).toLowerCase(Locale.ROOT);
 
         Draft d = new Draft();
-        if (has(all, "sunog", "nasusunog", "sinunog", "fire", "usok", "smoke")) { d.isDisaster = true; d.category = "Fire Emergency"; }
-        else if (has(all, "landslide", "guho", "gumuho", "pagguho")) { d.isDisaster = true; d.category = "Landslide"; }
-        else if (has(all, "bagyo", "typhoon", "malakas na hangin", "strong wind", "natumbang puno")) { d.isDisaster = true; d.category = "Typhoon / Strong Winds"; }
+        if (has(all, "landslide", "guho", "gumuho", "pagguho")) { d.isDisaster = true; d.category = "Landslide"; }
+        else if (has(all, "lindol", "earthquake", "lumindol", "yanig")) { d.isDisaster = true; d.category = "Earthquake"; }
         else if (has(all, "baha", "bumabaha", "bumaha", "binaha", "flood", "lubog", "nalubog", "tumataas ang tubig")) {
             if (has(all, "kanal", "drainage", "bara", "nabara", "imburnal")) { d.category = "Blocked Drainage / Flooding"; }
-            else { d.isDisaster = true; d.category = "Flooding"; }
+            else { d.isDisaster = true; d.category = "Flood"; }
         }
-        else if (has(all, "hinimatay", "nahimatay", "sugat", "injur", "aksidente", "accident", "ambulance", "medical", "atake", "inatake", "heart attack", "dugo", "dumudugo")) { d.isDisaster = true; d.category = "Medical Emergency"; }
         else if (has(all, "ingay", "maingay", "noise", "videoke", "karaoke", "away", "nag-aaway", "aaway", "gulo", "sigawan", "lasing", "fight")) { d.category = "Disturbance / Noise Complaint"; }
         else if (has(all, "vandal", "graffiti", "sinira", "nakaw", "ninakaw", "nagnakaw", "magnanakaw", "theft", "stolen", "snatch", "tambay")) { d.category = "Delinquency / Vandalism"; }
         else if (has(all, "kanal", "drainage", "bara", "nabara", "imburnal")) { d.category = "Blocked Drainage / Flooding"; }
