@@ -41,13 +41,29 @@ public final class HistorySync {
 
     public static final String PREFS = "AppSession";
     public static final String KEY_HISTORY = "USER_SUBMITTED_REQUESTS";
+    /** In-app inbox shown on the Alerts screen (newest first). */
+    public static final String KEY_INBOX = "USER_NOTIFICATIONS";
+    /** Ids of announcements the user was already told about (absent = first sync, seed quietly). */
+    public static final String KEY_SEEN_ANNOUNCEMENTS = "SEEN_ANNOUNCEMENT_IDS";
     public static final String CHANNEL_ID = "request_updates";
+    public static final String KIND_REQUEST = "request";
+    public static final String KIND_ANNOUNCEMENT = "announcement";
+    private static final int INBOX_MAX = 100;
     private static final Object LOCK = new Object();
 
-    /** A change worth a notification. */
+    /** A change worth a notification. source = who it came from, e.g. "Barangay Fort Bonifacio". */
     public static final class Update {
-        public final String key, title, message;
-        Update(String key, String title, String message) { this.key = key; this.title = title; this.message = message; }
+        public final String key, title, message, source, kind;
+        Update(String key, String title, String message, String source, String kind) {
+            this.key = key; this.title = title; this.message = message; this.source = source; this.kind = kind;
+        }
+    }
+
+    /** "Barangay Fort Bonifacio" from the signed-in user's saved barangay (falls back to "Your barangay"). */
+    public static String barangayLabel(Context ctx) {
+        String name = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("USER_BARANGAY", "").trim();
+        if (name.isEmpty()) return "Your barangay";
+        return name.matches("(?i)^(brgy\\.?|barangay)\\s.*") ? name : "Barangay " + name;
     }
 
     // ----------------------------------------------------------------
@@ -172,7 +188,7 @@ public final class HistorySync {
     }
 
     /** What to tell the resident when a row changed; null when nothing worth notifying changed. */
-    private static Update describeChange(JSONObject before, JSONObject after) {
+    private static Update describeChange(JSONObject before, JSONObject after, String source) {
         // saved by an older app version (no status_key yet): just adopt the server state quietly
         if (!before.has("status_key") && !"Pending".equalsIgnoreCase(before.optString("status", "Pending"))) return null;
         String oldKey = statusKey(before.optString("status_key", before.optString("status")));
@@ -206,7 +222,99 @@ public final class HistorySync {
             message = "New note from the barangay: " + newRemarks;
         }
         return new Update(after.optString("supabase_table") + ":" + after.optString("supabase_id"),
-                subject + " · " + statusDisplay(newKey)[0], message);
+                subject + " · " + statusDisplay(newKey)[0], message, source, KIND_REQUEST);
+    }
+
+    // ----------------------------------------------------------------
+    // New announcements
+    // ----------------------------------------------------------------
+
+    /**
+     * Compares the announcements the user can see with the ones already announced and returns an
+     * Update for every new one. The very first time (nothing saved yet) it only remembers them.
+     */
+    public static List<Update> newAnnouncements(Context ctx, JSONArray rows) {
+        List<Update> updates = new ArrayList<>();
+        if (rows == null) return updates;
+        SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String brgy = barangayLabel(ctx);
+        synchronized (LOCK) {
+            boolean firstSync = !prefs.contains(KEY_SEEN_ANNOUNCEMENTS);
+            java.util.Set<String> seen = new java.util.HashSet<>(prefs.getStringSet(KEY_SEEN_ANNOUNCEMENTS, new java.util.HashSet<>()));
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject a = rows.optJSONObject(i);
+                if (a == null) continue;
+                String id = str(a, "id");
+                if (id.isEmpty() || !seen.add(id) || firstSync) continue;
+                if (a.optBoolean("is_archived", false)) continue;
+                String title = str(a, "title");
+                String category = str(a, "category");
+                if (category.isEmpty()) category = "Announcement";
+                String source = a.isNull("psgc_code") || str(a, "psgc_code").isEmpty() ? "Nationwide" : brgy;
+                updates.add(new Update("announcements:" + id,
+                        "New " + category.toLowerCase(Locale.US) + ": " + (title.isEmpty() ? "Announcement" : title),
+                        "Nationwide".equals(source) ? "Nationwide announcement for all barangays. Tap to read it."
+                                : "Posted by " + source + ". Tap to read it.", source, KIND_ANNOUNCEMENT));
+            }
+            prefs.edit().putStringSet(KEY_SEEN_ANNOUNCEMENTS, seen).apply();
+        }
+        addToInbox(ctx, updates);
+        return updates;
+    }
+
+    // ----------------------------------------------------------------
+    // In-app inbox (Alerts screen)
+    // ----------------------------------------------------------------
+
+    /** Saves updates at the top of the inbox (unread). */
+    public static void addToInbox(Context ctx, List<Update> updates) {
+        if (updates == null || updates.isEmpty()) return;
+        SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        synchronized (LOCK) {
+            try {
+                JSONArray old = new JSONArray(prefs.getString(KEY_INBOX, "[]"));
+                JSONArray out = new JSONArray();
+                String now = nowIso();
+                for (int i = updates.size() - 1; i >= 0; i--) {
+                    Update u = updates.get(i);
+                    out.put(new JSONObject()
+                            .put("key", u.key).put("title", u.title).put("message", u.message)
+                            .put("source", u.source).put("kind", u.kind)
+                            .put("created_at", now).put("read", false));
+                }
+                for (int i = 0; i < old.length() && out.length() < INBOX_MAX; i++) out.put(old.get(i));
+                prefs.edit().putString(KEY_INBOX, out.toString()).apply();
+            } catch (Exception e) {
+                android.util.Log.w("HistorySync", "inbox: " + e.getMessage());
+            }
+        }
+    }
+
+    /** The inbox, newest first. */
+    public static List<JSONObject> readInbox(Context ctx) {
+        List<JSONObject> list = new ArrayList<>();
+        try {
+            JSONArray arr = new JSONArray(ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_INBOX, "[]"));
+            for (int i = 0; i < arr.length(); i++) list.add(arr.getJSONObject(i));
+        } catch (Exception ignored) {}
+        return list;
+    }
+
+    public static int unreadCount(Context ctx) {
+        int n = 0;
+        for (JSONObject o : readInbox(ctx)) if (!o.optBoolean("read", false)) n++;
+        return n;
+    }
+
+    public static void markInboxRead(Context ctx) {
+        SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        synchronized (LOCK) {
+            try {
+                JSONArray arr = new JSONArray(prefs.getString(KEY_INBOX, "[]"));
+                for (int i = 0; i < arr.length(); i++) arr.getJSONObject(i).put("read", true);
+                prefs.edit().putString(KEY_INBOX, arr.toString()).apply();
+            } catch (Exception ignored) {}
+        }
     }
 
     /**
@@ -217,6 +325,7 @@ public final class HistorySync {
         List<Update> updates = new ArrayList<>();
         if (serverRows.isEmpty()) return updates;
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String source = barangayLabel(ctx);
         synchronized (LOCK) {
             try {
                 JSONArray saved = new JSONArray(prefs.getString(KEY_HISTORY, "[]"));
@@ -236,7 +345,7 @@ public final class HistorySync {
                         if (mine != null) {
                             JSONObject before = new JSONObject(mine.toString());
                             applyServerStatus(mine, r);
-                            Update u = describeChange(before, mine);
+                            Update u = describeChange(before, mine, source);
                             if (u != null) updates.add(u);
                         } else {
                             merged.add(entryFromServer(e.getKey(), r));
@@ -251,6 +360,7 @@ public final class HistorySync {
                 android.util.Log.w("HistorySync", "merge: " + e.getMessage());
             }
         }
+        addToInbox(ctx, updates);
         return updates;
     }
 
@@ -267,8 +377,11 @@ public final class HistorySync {
             JSONArray r = SupabaseClient.fetchMySubmissionsBlocking(table, uid);
             if (r != null) rows.put(table, r);
         }
-        if (rows.isEmpty()) return null;
-        return merge(ctx, rows);
+        JSONArray announcements = SupabaseClient.fetchAnnouncementsBlocking();
+        if (rows.isEmpty() && announcements == null) return null;
+        List<Update> updates = new ArrayList<>(merge(ctx, rows));
+        updates.addAll(newAnnouncements(ctx, announcements));
+        return updates;
     }
 
     // ----------------------------------------------------------------
@@ -296,18 +409,21 @@ public final class HistorySync {
     public static void notifyUpdates(Context ctx, List<Update> updates) {
         if (updates == null || updates.isEmpty() || !canNotify(ctx)) return;
         ensureChannel(ctx);
-        Intent open = new Intent(ctx, PreviewActivity.class);
-        open.putExtra("LAYOUT_ID", R.layout.request_history);
-        open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pi = PendingIntent.getActivity(ctx, 7001, open,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         NotificationManagerCompat nm = NotificationManagerCompat.from(ctx);
         for (Update u : updates) {
+            boolean isAnnouncement = KIND_ANNOUNCEMENT.equals(u.kind);
+            Intent open = new Intent(ctx, PreviewActivity.class);
+            open.putExtra("LAYOUT_ID", isAnnouncement ? R.layout.announcements : R.layout.request_history);
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            PendingIntent pi = PendingIntent.getActivity(ctx, isAnnouncement ? 7002 : 7001, open,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            String from = "From " + u.source;
             NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_bell)
                     .setContentTitle(u.title)
                     .setContentText(u.message)
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(u.message))
+                    .setSubText(from)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(u.message + "\n" + from))
                     .setContentIntent(pi)
                     .setAutoCancel(true)
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT);

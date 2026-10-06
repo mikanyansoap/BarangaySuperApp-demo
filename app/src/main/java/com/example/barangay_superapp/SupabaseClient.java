@@ -742,12 +742,32 @@ public class SupabaseClient {
         return getAccessToken();
     }
 
-    /** Emergency hotlines for a barangay (10-digit PSGC code) + nationwide ones (psgc_code is null). */
+    /**
+     * Emergency hotlines of the user's barangay + nationwide ones (psgc_code is null).
+     * No psgc filter in the URL on purpose: RLS (contacts_select) already returns exactly those rows
+     * for the signed-in user, so a stale / differently formatted code on the phone can't hide them.
+     */
     public static void fetchEmergencyContacts(String psgcCode, Callback callback) {
-        String code = dbPsgc(psgcCode);
-        String filter = code.matches("\\d{10}") ? "or=(psgc_code.eq." + code + ",psgc_code.is.null)" : "psgc_code=is.null";
-        String endpoint = "/rest/v1/emergency_contacts?select=*&" + filter + "&order=id.asc";
+        String endpoint = "/rest/v1/emergency_contacts?select=*&order=id.asc";
         withFreshToken(token -> client.newCall(getAuthenticatedBuilder(endpoint, token).get().build()).enqueue(callback));
+    }
+
+    /** BLOCKING: the announcements the signed-in user can see (newest first), or null on failure. */
+    public static JSONArray fetchAnnouncementsBlocking() {
+        String token = freshTokenBlocking();
+        if (token == null) return null;
+        String endpoint = "/rest/v1/announcements?select=id,title,category,psgc_code,is_archived,created_at&order=created_at.desc&limit=50";
+        try (Response r = client.newCall(getAuthenticatedBuilder(endpoint, token).get().build()).execute()) {
+            String body = readBody(r);
+            if (!r.isSuccessful()) {
+                android.util.Log.w("SupabaseSync", "announcements HTTP " + r.code() + ": " + body);
+                return null;
+            }
+            return new JSONArray(body);
+        } catch (Exception e) {
+            android.util.Log.w("SupabaseSync", "announcements: " + e.getMessage());
+            return null;
+        }
     }
 
     /** Edits a submitted row (e.g. fixing a typo while still pending). table = "reports" or "requests". */
@@ -807,28 +827,16 @@ public class SupabaseClient {
     // ANNOUNCEMENTS
     // ====================================================================
 
-    /** Announcements for the user's barangay, matching both the 9-digit and 10-digit PSGC code (plus global ones). */
+    /**
+     * Announcements of the user's barangay + nationwide ones (psgc_code is null).
+     * No psgc filter in the URL on purpose: RLS (announcements_select) already returns exactly those
+     * rows for the signed-in user, so a stale / differently formatted code on the phone can't hide them.
+     */
     public static void fetchAnnouncementsFromSupabase(String psgcCode, Callback callback) {
-        try {
-            String endpoint = "/rest/v1/announcements?select=*&order=created_at.desc";
-            if (psgcCode != null && !psgcCode.isEmpty()) {
-                java.util.LinkedHashSet<String> codes = new java.util.LinkedHashSet<>();
-                codes.add(psgcCode);
-                String legacy = PSGCClient.toLegacyCode(psgcCode);
-                if (!legacy.isEmpty()) codes.add(legacy);
-                String modern = PSGCClient.toModernCode(psgcCode);
-                if (!modern.isEmpty()) codes.add(modern);
-                StringBuilder or = new StringBuilder();
-                for (String c : codes) or.append("psgc_code.eq.").append(c).append(",");
-                endpoint = "/rest/v1/announcements?select=*&or=(" + or + "psgc_code.is.null)&order=created_at.desc";
-            }
-            final String finalEndpoint = endpoint;
-            withFreshToken(token -> {
-                Request request = getAuthenticatedBuilder(finalEndpoint, token).get().build();
-                client.newCall(request).enqueue(callback);
-            });
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        final String endpoint = "/rest/v1/announcements?select=*&order=created_at.desc";
+        withFreshToken(token -> {
+            Request request = getAuthenticatedBuilder(endpoint, token).get().build();
+            client.newCall(request).enqueue(callback);
+        });
     }
 }

@@ -1880,6 +1880,21 @@ public class PreviewActivity extends AppCompatActivity {
         }
 
         // ====================================================================
+        // NOTIFICATIONS (Alerts tab): request / report updates + new announcements,
+        // each saying where it came from (the user's barangay or Nationwide)
+        // ====================================================================
+        if (layoutId == R.layout.notifs) {
+            TextView tvEmptyDate = findViewById(R.id.tvEmptyStateDate);
+            if (tvEmptyDate != null) tvEmptyDate.setText(new SimpleDateFormat("MMM d, yyyy · EEE", Locale.US).format(new Date()));
+            renderNotifications();
+            HistorySync.markInboxRead(this);
+            startLiveUpdates(() -> syncHistoryStatuses(prefs, () -> {
+                renderNotifications();
+                HistorySync.markInboxRead(this);
+            }), 20000);
+        }
+
+        // ====================================================================
         // SERVICES REDIRECTION LOGIC
         // ====================================================================
         if (layoutId == R.layout.services) {
@@ -3602,6 +3617,69 @@ public class PreviewActivity extends AppCompatActivity {
 
 
     // ====================================================================
+    // NOTIFICATIONS SCREEN
+    // ====================================================================
+
+    private void renderNotifications() {
+        RecyclerView rv = findViewById(R.id.rvNotifications);
+        View empty = findViewById(R.id.layoutEmptyStateNotifications);
+        if (rv == null) return;
+        final List<JSONObject> items = HistorySync.readInbox(this);
+        if (empty != null) empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+        rv.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        if (rv.getLayoutManager() == null) rv.setLayoutManager(new LinearLayoutManager(this));
+        rv.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override
+            public RecyclerView.ViewHolder onCreateViewHolder(@NonNull android.view.ViewGroup parent, int viewType) {
+                View v = getLayoutInflater().inflate(R.layout.item_notification, parent, false);
+                return new RecyclerView.ViewHolder(v) {};
+            }
+
+            @Override
+            public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                JSONObject n = items.get(position);
+                View item = holder.itemView;
+                String created = n.optString("created_at", "");
+                String day = HistorySync.formatIsoDate(created, true);
+                int dot = day.indexOf(" · ");
+                String dayOnly = dot > 0 ? day.substring(0, dot) : day;
+                String time = dot > 0 ? day.substring(dot + 3) : "";
+                String prevDay = "";
+                if (position > 0) {
+                    String p = HistorySync.formatIsoDate(items.get(position - 1).optString("created_at", ""), true);
+                    int pd = p.indexOf(" · ");
+                    prevDay = pd > 0 ? p.substring(0, pd) : p;
+                }
+                View sep = item.findViewById(R.id.dateSeparatorContainer);
+                if (sep != null) sep.setVisibility(position == 0 || !dayOnly.equals(prevDay) ? View.VISIBLE : View.GONE);
+                TextView tvDate = item.findViewById(R.id.tvDateHeader);
+                if (tvDate != null) tvDate.setText(dayOnly);
+
+                boolean announcement = HistorySync.KIND_ANNOUNCEMENT.equals(n.optString("kind"));
+                ((TextView) item.findViewById(R.id.tvNotificationTitle)).setText(n.optString("title", "Update"));
+                String source = n.optString("source", "");
+                StringBuilder desc = new StringBuilder(n.optString("message", ""));
+                desc.append("\n").append(announcement ? "Announcement" : "Request update");
+                if (!source.isEmpty()) desc.append(" · From ").append(source);
+                if (!time.isEmpty()) desc.append(" · ").append(time);
+                ((TextView) item.findViewById(R.id.tvNotificationDesc)).setText(desc.toString());
+
+                View icon = item.findViewById(R.id.iconImage);
+                CardView iconBox = item.findViewById(R.id.iconContainer);
+                if (icon != null) icon.setBackgroundColor(Color.parseColor(announcement ? "#DBA03B" : "#247D76"));
+                if (iconBox != null) iconBox.setCardBackgroundColor(Color.parseColor(announcement ? "#FDF1DA" : "#DDF0EC"));
+                View unread = item.findViewById(R.id.unreadDot);
+                if (unread != null) unread.setVisibility(n.optBoolean("read", false) ? View.INVISIBLE : View.VISIBLE);
+
+                item.setOnClickListener(v -> launchPreview(announcement ? R.layout.announcements : R.layout.request_history));
+            }
+
+            @Override
+            public int getItemCount() { return items.size(); }
+        });
+    }
+
+    // ====================================================================
     // EMERGENCY CONTACTS (public.emergency_contacts)
     // ====================================================================
 
@@ -4008,6 +4086,8 @@ public class PreviewActivity extends AppCompatActivity {
                             .putString("USER_PROVINCE", province)
                             .putString("USER_REGION", region)
                             .putString("USER_ADDRESS", fullAddress)
+                            .remove(HistorySync.KEY_SEEN_ANNOUNCEMENTS)   // new barangay: don't flood with its old posts
+                            .remove("CACHED_EMERGENCY_CONTACTS")
                             .apply();
                     selectedBarangayCode = barangayCode;
                     selectedBarangayName = barangay;
@@ -4158,7 +4238,9 @@ public class PreviewActivity extends AppCompatActivity {
         clearUserPrefs(ed); // never keep the previous account's address
         if (!userId.isEmpty() && !userId.equals(prefs.getString("HISTORY_OWNER_ID", ""))) {
             // another account signed in on this phone: its history comes from Supabase, not the previous user's
-            ed.remove("USER_SUBMITTED_REQUESTS").remove("CACHED_EMERGENCY_CONTACTS").putString("HISTORY_OWNER_ID", userId);
+            ed.remove("USER_SUBMITTED_REQUESTS").remove("CACHED_EMERGENCY_CONTACTS")
+              .remove(HistorySync.KEY_INBOX).remove(HistorySync.KEY_SEEN_ANNOUNCEMENTS)
+              .putString("HISTORY_OWNER_ID", userId);
         }
         ed.putBoolean("IS_LOGGED_IN", false); // only set to true once the profile says "approved"
         if (!userId.isEmpty()) ed.putString("USER_ID", userId);
